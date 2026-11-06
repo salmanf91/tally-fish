@@ -1,11 +1,15 @@
 const app = require('./app');
 const config = require('./config');
 const db = require('./db');
+const { initNotificationListeners } = require('./notifications');
 
 const PORT = config.port || 3000;
 
 async function startServer() {
   try {
+    // Register background event listeners (Web Push, etc.)
+    initNotificationListeners();
+
     // Test PostgreSQL database connectivity on boot
     const dbTest = await db.query('SELECT NOW() as current_time, current_database() as db_name');
     console.log(

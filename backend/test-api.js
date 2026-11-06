@@ -248,9 +248,115 @@ async function runTests() {
       'Audit log captured rates and master actions with diffs'
     );
 
+    // 11. Web Push Subsystem: VAPID Key & Push Subscription
+    console.log('\n--- Test Group: Web Push Subsystem (VAPID) ---');
+    const vapidRes = await request('GET', '/notifications/vapid-key');
+    assert(
+      vapidRes.status === 200 && typeof vapidRes.body.publicKey === 'string' && vapidRes.body.publicKey.length > 20,
+      'GET /api/notifications/vapid-key returns valid VAPID public key'
+    );
+
+    // Subscribe BillingAdmin device token linked to (user_id, branch_id)
+    const testEndpointBilling = 'https://fcm.googleapis.com/fcm/send/test-billing-endpoint-' + Date.now();
+    const subBillingRes = await request(
+      'POST',
+      '/notifications/subscribe',
+      {
+        endpoint: testEndpointBilling,
+        keys: {
+          p256dh: 'BNcRdreALRFXTkOOUHK1EtK2wtaz5Ry4YwfO5T9mockKeyBilling',
+          auth: 'mockAuthSecretBilling',
+        },
+      },
+      { Authorization: `Bearer ${billingToken}`, 'X-Branch-ID': branchId }
+    );
+    assert(subBillingRes.status === 201 && subBillingRes.body.success, 'POST /api/notifications/subscribe saves subscription for BillingAdmin');
+
+    // Subscribe Owner device token linked to (user_id, branch_id)
+    const testEndpointOwner = 'https://fcm.googleapis.com/fcm/send/test-owner-endpoint-' + Date.now();
+    const subOwnerRes = await request(
+      'POST',
+      '/notifications/subscribe',
+      {
+        endpoint: testEndpointOwner,
+        keys: {
+          p256dh: 'BNcRdreALRFXTkOOUHK1EtK2wtaz5Ry4YwfO5T9mockKeyOwner',
+          auth: 'mockAuthSecretOwner',
+        },
+      },
+      { Authorization: `Bearer ${adminToken}`, 'X-Branch-ID': branchId }
+    );
+    assert(subOwnerRes.status === 201 && subOwnerRes.body.success, 'POST /api/notifications/subscribe saves subscription for Owner');
+
+    // Verify stored subscriptions in PostgreSQL
+    const dbSubs = await db.query(
+      'SELECT id, endpoint, user_id, branch_id FROM push_subscriptions WHERE endpoint IN ($1, $2)',
+      [testEndpointBilling, testEndpointOwner]
+    );
+    assert(dbSubs.rows.length === 2, 'Push subscriptions verified in PostgreSQL push_subscriptions table');
+
+    // Test entry:created notification dispatch query logic
+    const { getActiveBranchAdminSubscriptions, eventBus } = require('./notifications');
+    const adminSubs = await getActiveBranchAdminSubscriptions(branchId);
+    assert(
+      adminSubs.some((s) => s.endpoint === testEndpointBilling) &&
+      adminSubs.some((s) => s.endpoint === testEndpointOwner),
+      'Active admin subscriptions resolved correctly for target branch'
+    );
+
+    // Test entry:created event emission on entry creation
+    let eventReceivedEntry = null;
+    eventBus.once('entry:created', (entry) => {
+      eventReceivedEntry = entry;
+    });
+
+    const eventEntryRes = await request(
+      'POST',
+      '/entries',
+      {
+        gross_loaded_kg: 1200,
+        empty_tare_kg: 200,
+        ice_water_kg: 50,
+        party_name: 'Push Event Vendor',
+        vehicle_no: 'KA-19-EV-9999',
+        boxes: [{ fish_name: 'SARDINE', box_count: 10, mix_percentage: 100 }],
+      },
+      { Authorization: `Bearer ${staffToken}`, 'X-Branch-ID': branchId }
+    );
+    assert(eventEntryRes.status === 201, 'Created entry to verify entry:created event emission');
+
+    // Give event loop tick
+    await new Promise((r) => setTimeout(r, 100));
+    assert(
+      eventReceivedEntry !== null && Number(eventReceivedEntry.net_kg) === 950,
+      'entry:created event bus listener successfully triggered with complete entry details'
+    );
+
+    // 12. Stale Push Subscription Pruning (HTTP 410 / 404 handler)
+    console.log('\n--- Test Group: Stale Push Subscription Cleanup ---');
+    const { deleteSubscriptionByEndpoint } = require('./notifications');
+    const staleEndpoint = 'https://fcm.googleapis.com/fcm/send/stale-device-' + Date.now();
+    await request(
+      'POST',
+      '/notifications/subscribe',
+      {
+        endpoint: staleEndpoint,
+        keys: { p256dh: 'staleKey', auth: 'staleAuth' },
+      },
+      { Authorization: `Bearer ${billingToken}`, 'X-Branch-ID': branchId }
+    );
+
+    const beforeDelete = await db.query('SELECT id FROM push_subscriptions WHERE endpoint = $1', [staleEndpoint]);
+    assert(beforeDelete.rows.length === 1, 'Stale test subscription saved');
+
+    // Simulate 410 Gone / 404 Not Found pruning
+    await deleteSubscriptionByEndpoint(staleEndpoint);
+    const afterDelete = await db.query('SELECT id FROM push_subscriptions WHERE endpoint = $1', [staleEndpoint]);
+    assert(afterDelete.rows.length === 0, 'Stale subscription successfully pruned from PostgreSQL');
+
     console.log('\n======================================================');
     if (failed === 0) {
-      console.log('🎉 ALL TESTS PASSED! PHASE 2 BACKEND IS 100% OPERATIONAL');
+      console.log('🎉 ALL TESTS PASSED! PHASES 2 & 3 ARE 100% OPERATIONAL');
     } else {
       console.error(`💥 ${failed} TEST(S) FAILED`);
     }
