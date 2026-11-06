@@ -1,0 +1,27 @@
+{
+  "name": "tally-fish",
+  "version": "1.0.0",
+  "description": "Daily Statement Application - Multi-Branch, Offline-Capable PWA with Background Web Push",
+  "main": "src/index.js",
+  "scripts": {
+    "migrate:up": "node-pg-migrate --envPath .env up",
+    "migrate:down": "node-pg-migrate --envPath .env down",
+    "migrate:create": "node-pg-migrate create"
+  },
+  "keywords": [
+    "pwa",
+    "postgresql",
+    "migrations",
+    "tally-fish",
+    "node-pg-migrate"
+  ],
+  "author": "Pixelcodes",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "node-pg-migrate": "^7.9.1"
+  }
+}
