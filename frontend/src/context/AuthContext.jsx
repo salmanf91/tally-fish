@@ -54,7 +54,6 @@ export function AuthProvider({ children }) {
     localStorage.removeItem('tally_fish_token');
     localStorage.removeItem('tally_fish_user');
     localStorage.removeItem('tally_fish_branches');
-    localStorage.removeItem('tally_fish_branch_id');
   };
 
   // Helper role checkers based on standardized 3 roles

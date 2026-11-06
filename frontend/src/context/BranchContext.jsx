@@ -25,10 +25,12 @@ export function BranchProvider({ children }) {
       setActiveBranchIdState(savedId);
       setApiBranch(savedId);
     } else {
-      // Default to user's primary assigned branch
-      const defaultId = branches[0].branch_id;
+      // Default to primary operating branch (ULLAL if available, else first assigned)
+      const primaryBranch = branches.find((b) => b.branch_code === 'ULLAL') || branches[0];
+      const defaultId = primaryBranch.branch_id;
       setActiveBranchIdState(defaultId);
       setApiBranch(defaultId);
+      localStorage.setItem('tally_fish_branch_id', defaultId);
     }
   }, [branches, isAuthenticated]);
 

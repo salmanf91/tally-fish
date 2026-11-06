@@ -25,7 +25,7 @@ const CLIENT_PHONES = {
 };
 
 export default function StatementView({ onNavigateToRates }) {
-  const { activeBranchId, activeBranch } = useBranch();
+  const { activeBranchId, activeBranch, availableBranches, setActiveBranchId } = useBranch();
   const { user } = useAuth();
 
   const isBilling = activeBranch?.role === 'billingAdmin';
@@ -62,6 +62,7 @@ export default function StatementView({ onNavigateToRates }) {
       return res.data || [];
     },
     enabled: !!activeBranchId,
+    refetchOnMount: 'always',
   });
 
   // Filter entries
@@ -330,8 +331,26 @@ export default function StatementView({ onNavigateToRates }) {
       {/* Procurement Slips Table */}
       <div className="light-card rounded-2xl overflow-hidden">
         {filteredEntries.length === 0 ? (
-          <div className="p-8 text-center text-slate-400 text-xs">
-            No entries match the selected filters.
+          <div className="p-8 text-center space-y-3">
+            <p className="text-slate-500 text-xs font-medium">
+              No entries found for {activeBranch?.branch_name} on {fromDate === toDate ? fromDate : `${fromDate} to ${toDate}`}.
+            </p>
+            {availableBranches && availableBranches.length > 1 && (
+              <div className="flex flex-wrap justify-center gap-2 pt-1">
+                {availableBranches
+                  .filter((b) => b.branch_id !== activeBranchId)
+                  .map((other) => (
+                    <button
+                      key={other.branch_id}
+                      type="button"
+                      onClick={() => setActiveBranchId(other.branch_id)}
+                      className="text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded-xl px-3.5 py-2 transition-all shadow-sm"
+                    >
+                      Switch to {other.branch_name} ({other.branch_code}) →
+                    </button>
+                  ))}
+              </div>
+            )}
           </div>
         ) : (
           <table className="w-full text-left border-collapse">

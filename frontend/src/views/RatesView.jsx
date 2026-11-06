@@ -18,7 +18,7 @@ const LAST_KNOWN_RATES = {
 };
 
 export default function RatesView({ initialEntryId = null, onDone }) {
-  const { activeBranchId, activeBranch } = useBranch();
+  const { activeBranchId, activeBranch, availableBranches, setActiveBranchId } = useBranch();
   const queryClient = useQueryClient();
 
   // Fetch all entries for branch
@@ -29,6 +29,7 @@ export default function RatesView({ initialEntryId = null, onDone }) {
       return res.data || [];
     },
     enabled: !!activeBranchId,
+    refetchOnMount: 'always',
   });
 
   // Pending queue of entry IDs
@@ -196,14 +197,30 @@ export default function RatesView({ initialEntryId = null, onDone }) {
           </span>
         </div>
 
-        <div className="light-card p-10 rounded-2xl text-center space-y-2">
+        <div className="light-card p-10 rounded-2xl text-center space-y-3">
           <div className="w-12 h-12 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center mx-auto mb-2">
             <Check className="w-6 h-6 stroke-[2.5]" />
           </div>
           <h3 className="font-bold text-sm text-slate-900">All Caught Up</h3>
           <p className="text-xs text-slate-500">
-            Every entry for this branch has its rates set and is forwarded to billing.
+            Every entry for {activeBranch?.branch_name} has its rates set and is forwarded to billing.
           </p>
+          {availableBranches && availableBranches.length > 1 && (
+            <div className="pt-2 flex flex-wrap justify-center gap-2">
+              {availableBranches
+                .filter((b) => b.branch_id !== activeBranchId)
+                .map((other) => (
+                  <button
+                    key={other.branch_id}
+                    type="button"
+                    onClick={() => setActiveBranchId(other.branch_id)}
+                    className="text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded-xl px-3.5 py-1.5 transition-all shadow-sm"
+                  >
+                    Check {other.branch_name} ({other.branch_code}) →
+                  </button>
+                ))}
+            </div>
+          )}
         </div>
       </div>
     );
