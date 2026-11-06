@@ -25,6 +25,13 @@ router.post(
   entriesController.createEntry
 );
 
+// Batch sync offline buffered entries: staffAdmin, billingAdmin, owner
+router.post(
+  '/sync',
+  requireBranchRole(['staffAdmin', 'billingAdmin', 'owner']),
+  entriesController.syncEntries
+);
+
 // Get single entry details
 router.get(
   '/:id',

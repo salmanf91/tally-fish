@@ -14,6 +14,7 @@ import AccountsView from './views/AccountsView';
 import MastersView from './views/MastersView';
 import NotificationsView from './views/NotificationsView';
 import LockedSlipModal from './views/LockedSlipModal';
+import { initSyncManager } from './services/syncManager';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -51,6 +52,8 @@ function MainApp() {
 
   // Service Worker Registration for PWA Standalone & Web Push
   useEffect(() => {
+    initSyncManager(queryClient);
+
     if ('serviceWorker' in navigator && process.env.NODE_ENV !== 'test') {
       window.addEventListener('load', () => {
         navigator.serviceWorker

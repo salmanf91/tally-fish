@@ -622,10 +622,328 @@ async function updateEntry(req, res, next) {
   }
 }
 
+/**
+ * POST /api/entries/sync
+ * Batch syncs offline buffered entries and resolves server-lock conflicts
+ */
+async function syncEntries(req, res, next) {
+  try {
+    const branchId = req.branchId;
+    const actorId = req.user.id;
+    const { entries } = req.body;
+
+    if (!Array.isArray(entries)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Payload must include an "entries" array',
+      });
+    }
+
+    const synced = [];
+    const conflicts = [];
+    const errors = [];
+
+    for (const item of entries) {
+      const tempId = item.tempId || `temp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+      try {
+        // Case A: Offline modification to existing entry
+        if (item.id) {
+          const existingRes = await db.query(
+            'SELECT * FROM entries WHERE id = $1 AND branch_id = $2',
+            [item.id, branchId]
+          );
+
+          if (existingRes.rows.length === 0) {
+            errors.push({ tempId, id: item.id, error: 'Entry not found on server' });
+            continue;
+          }
+
+          const currentEntry = existingRes.rows[0];
+
+          // Check if entry has rates or is LOCKED
+          const rateCheck = await db.query(
+            'SELECT COUNT(*)::int as count FROM entry_rates WHERE entry_id = $1',
+            [item.id]
+          );
+          const hasRates = rateCheck.rows[0].count > 0;
+
+          if (currentEntry.status === 'LOCKED' || hasRates) {
+            // Server-lock conflict: Admin has rated/locked while staff was offline
+            await db.query("UPDATE entries SET status = 'HOLD_REVIEW' WHERE id = $1", [item.id]);
+            conflicts.push({
+              tempId,
+              id: item.id,
+              status: 'HOLD_REVIEW',
+              conflict: true,
+              message: 'Held for Admin Review: Admin assigned rates while Staff was offline.',
+            });
+            continue;
+          }
+
+          // Not locked: Proceed with updating existing entry
+          const loaded = Number(item.gross_loaded_kg) || Number(currentEntry.gross_loaded_kg);
+          const empty = Number(item.empty_tare_kg) || Number(currentEntry.empty_tare_kg);
+          const ice = Number(item.ice_water_kg) || Number(currentEntry.ice_water_kg);
+          const netKg = calculateNetWeight(loaded, empty, ice);
+
+          const updatedEntry = await db.withTransaction(async (client) => {
+            const updateRes = await client.query(
+              `
+              UPDATE entries
+              SET gross_loaded_kg = $1,
+                  empty_tare_kg = $2,
+                  ice_water_kg = $3,
+                  net_kg = $4,
+                  remarks = COALESCE($5, remarks),
+                  updated_at = CURRENT_TIMESTAMP
+              WHERE id = $6 AND branch_id = $7
+              RETURNING *
+              `,
+              [loaded, empty, ice, netKg, item.remarks, item.id, branchId]
+            );
+            return updateRes.rows[0];
+          }, { actorId, branchId });
+
+          synced.push({
+            tempId,
+            id: item.id,
+            daily_sl_no: updatedEntry.daily_sl_no,
+            status: updatedEntry.status,
+            synced: true,
+          });
+          continue;
+        }
+
+        // Case B: Brand new entry created offline
+        const loaded = Number(item.gross_loaded_kg) || 0;
+        const empty = Number(item.empty_tare_kg) || 0;
+        const ice = Number(item.ice_water_kg) || 0;
+        const netKg = calculateNetWeight(loaded, empty, ice);
+
+        if (!Array.isArray(item.boxes) || item.boxes.length === 0) {
+          errors.push({ tempId, error: 'At least one fish box specification required' });
+          continue;
+        }
+
+        const targetDate = item.entry_date ? item.entry_date.split('T')[0] : new Date().toISOString().split('T')[0];
+
+        const newEntryRecord = await db.withTransaction(async (client) => {
+          // 1. Resolve Party
+          let resolvedPartyId = item.party_id || null;
+          let resolvedPartyName = item.party_name ? item.party_name.trim() : null;
+
+          if (resolvedPartyId) {
+            const pCheck = await client.query(
+              'SELECT id, name FROM parties WHERE id = $1 AND (branch_id = $2 OR branch_id IS NULL)',
+              [resolvedPartyId, branchId]
+            );
+            if (pCheck.rows.length > 0) resolvedPartyName = pCheck.rows[0].name;
+          } else if (resolvedPartyName) {
+            const pLookup = await client.query(
+              'SELECT id, name FROM parties WHERE LOWER(name) = LOWER($1) AND (branch_id = $2 OR branch_id IS NULL) LIMIT 1',
+              [resolvedPartyName, branchId]
+            );
+            if (pLookup.rows.length > 0) {
+              resolvedPartyId = pLookup.rows[0].id;
+              resolvedPartyName = pLookup.rows[0].name;
+            } else {
+              const newP = await client.query(
+                'INSERT INTO parties (id, branch_id, name, is_active) VALUES (gen_random_uuid(), $1, $2, true) RETURNING id, name',
+                [branchId, resolvedPartyName]
+              );
+              resolvedPartyId = newP.rows[0].id;
+              resolvedPartyName = newP.rows[0].name;
+            }
+          }
+
+          // 2. Resolve Vehicle
+          let resolvedVehicleId = item.vehicle_id || null;
+          let resolvedVehicleNo = item.vehicle_no ? item.vehicle_no.trim().toUpperCase() : null;
+
+          if (resolvedVehicleId) {
+            const vCheck = await client.query(
+              'SELECT id, vehicle_no FROM vehicles WHERE id = $1 AND (branch_id = $2 OR branch_id IS NULL)',
+              [resolvedVehicleId, branchId]
+            );
+            if (vCheck.rows.length > 0) resolvedVehicleNo = vCheck.rows[0].vehicle_no;
+          } else if (resolvedVehicleNo) {
+            const vLookup = await client.query(
+              'SELECT id, vehicle_no FROM vehicles WHERE LOWER(vehicle_no) = LOWER($1) AND (branch_id = $2 OR branch_id IS NULL) LIMIT 1',
+              [resolvedVehicleNo, branchId]
+            );
+            if (vLookup.rows.length > 0) {
+              resolvedVehicleId = vLookup.rows[0].id;
+              resolvedVehicleNo = vLookup.rows[0].vehicle_no;
+            } else {
+              const newV = await client.query(
+                'INSERT INTO vehicles (id, branch_id, vehicle_no, party_id, is_active) VALUES (gen_random_uuid(), $1, $2, $3, true) RETURNING id, vehicle_no',
+                [branchId, resolvedVehicleNo, resolvedPartyId]
+              );
+              resolvedVehicleId = newV.rows[0].id;
+              resolvedVehicleNo = newV.rows[0].vehicle_no;
+            }
+          }
+
+          // 3. Resolve Boxes & Fish Types
+          const validatedBoxes = [];
+          for (const box of item.boxes) {
+            let fId = box.fish_type_id || null;
+            let fName = box.fish_name ? box.fish_name.trim().toUpperCase() : 'FISH';
+
+            if (fId) {
+              const fCheck = await client.query(
+                'SELECT id, name FROM fish_types WHERE id = $1 AND (branch_id = $2 OR branch_id IS NULL)',
+                [fId, branchId]
+              );
+              if (fCheck.rows.length > 0) fName = fCheck.rows[0].name;
+            } else if (fName) {
+              const fLookup = await client.query(
+                'SELECT id, name FROM fish_types WHERE LOWER(name) = LOWER($1) AND (branch_id = $2 OR branch_id IS NULL) LIMIT 1',
+                [fName, branchId]
+              );
+              if (fLookup.rows.length > 0) {
+                fId = fLookup.rows[0].id;
+                fName = fLookup.rows[0].name;
+              } else {
+                const newF = await client.query(
+                  'INSERT INTO fish_types (id, branch_id, name, is_active) VALUES (gen_random_uuid(), $1, $2, true) RETURNING id, name',
+                  [branchId, fName]
+                );
+                fId = newF.rows[0].id;
+                fName = newF.rows[0].name;
+              }
+            }
+
+            validatedBoxes.push({
+              fish_type_id: fId,
+              fish_name: fName,
+              box_count: parseInt(box.box_count, 10) || 1,
+              mix_percentage: parseFloat(box.mix_percentage) || 100.0,
+            });
+          }
+
+          // 4. Atomic serial allocation
+          const serialRes = await client.query(
+            `
+            SELECT COALESCE(MAX(daily_sl_no), 0) + 1 AS next_sl_no
+            FROM entries
+            WHERE branch_id = $1 AND entry_date = $2
+            `,
+            [branchId, targetDate]
+          );
+          const dailySlNo = parseInt(serialRes.rows[0].next_sl_no, 10);
+
+          const computedRemarks = item.remarks && item.remarks.trim()
+            ? item.remarks.trim()
+            : generateNarrativeRemarks(validatedBoxes);
+
+          // 5. Insert Entry
+          const insertEntryRes = await client.query(
+            `
+            INSERT INTO entries (
+              id, branch_id, daily_sl_no, entry_date, party_id, party_name,
+              vehicle_id, vehicle_no, gross_loaded_kg, empty_tare_kg, ice_water_kg,
+              net_kg, remarks, status
+            )
+            VALUES (
+              gen_random_uuid(), $1, $2, $3, $4, $5,
+              $6, $7, $8, $9, $10,
+              $11, $12, 'RATE_PENDING'
+            )
+            RETURNING *;
+            `,
+            [
+              branchId,
+              dailySlNo,
+              targetDate,
+              resolvedPartyId,
+              resolvedPartyName || 'UNKNOWN',
+              resolvedVehicleId,
+              resolvedVehicleNo || 'UNKNOWN',
+              loaded,
+              empty,
+              ice,
+              netKg,
+              computedRemarks,
+            ]
+          );
+          const createdEntry = insertEntryRes.rows[0];
+
+          // 6. Insert Entry Boxes
+          const savedBoxes = [];
+          for (const box of validatedBoxes) {
+            const bRes = await client.query(
+              `
+              INSERT INTO entry_boxes (id, entry_id, fish_type_id, fish_name, box_count, mix_percentage)
+              VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)
+              RETURNING *;
+              `,
+              [createdEntry.id, box.fish_type_id, box.fish_name, box.box_count, box.mix_percentage]
+            );
+            savedBoxes.push(bRes.rows[0]);
+          }
+
+          await recordAuditLog(
+            {
+              actorId,
+              branchId,
+              action: 'ENTRY_CREATED_OFFLINE_SYNC',
+              entityType: 'entries',
+              entityId: createdEntry.id,
+              diffs: {
+                tempId,
+                entry: createdEntry,
+                boxes: savedBoxes,
+              },
+              ipAddress: req.ip,
+            },
+            client
+          );
+
+          return { ...createdEntry, boxes: savedBoxes };
+        }, { actorId, branchId });
+
+        // Trigger push notification event
+        try {
+          eventBus.emit('entry:created', newEntryRecord);
+        } catch (eventErr) {
+          console.error('[EventBus] Error dispatching entry:created event during sync:', eventErr.message);
+        }
+
+        synced.push({
+          tempId,
+          id: newEntryRecord.id,
+          daily_sl_no: newEntryRecord.daily_sl_no,
+          status: newEntryRecord.status,
+          entry_date: newEntryRecord.entry_date,
+          party_name: newEntryRecord.party_name,
+          vehicle_no: newEntryRecord.vehicle_no,
+          net_kg: newEntryRecord.net_kg,
+          synced: true,
+        });
+      } catch (err) {
+        errors.push({ tempId, error: err.message });
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      processed: entries.length,
+      synced,
+      conflicts,
+      errors,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   createEntry,
   getEntries,
   getEntryById,
   updateEntry,
+  syncEntries,
 };
 

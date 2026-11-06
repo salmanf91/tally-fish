@@ -166,3 +166,18 @@ self.addEventListener('notificationclick', (event) => {
   );
 });
 
+// 6. Background Sync: Wake up client tabs to flush offline buffer upon network restoration
+self.addEventListener('sync', (event) => {
+  if (event.tag === 'sync-entries') {
+    console.log('[SW] Background sync triggered for "sync-entries"');
+    event.waitUntil(
+      self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+        clients.forEach((client) => {
+          client.postMessage({ type: 'SYNC_TRIGGERED' });
+        });
+      })
+    );
+  }
+});
+
+

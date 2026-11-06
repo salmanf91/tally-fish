@@ -13,13 +13,21 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { useBranch } from '../context/BranchContext';
-import { useParties, useVehicles, useFishTypes } from '../hooks/useMasters';
+import {
+  useParties,
+  useVehicles,
+  useFishTypes,
+  useCreateQuickParty,
+  useCreateQuickVehicle,
+  useCreateQuickFishType,
+} from '../hooks/useMasters';
 import { api } from '../services/api';
 import { saveOfflineEntry } from '../services/db';
+import { registerBackgroundSync } from '../services/syncManager';
 import NumericKeypad from '../components/common/NumericKeypad';
 
-const FISH_CHIPS = ['CHAMBAN', 'SARDINE', 'KODANDE', 'MURU HEAD', 'GOLAI', 'THONDE', 'AILE', 'DISCO', 'MIX', 'PAMBOL', 'THAKATTE'];
-const RECENT_VEHICLES = ['KL 59Z 5206', 'KA 19D 7628', 'KA 19AE 6136', 'KA 09C 8942'];
+const DEFAULT_FISH_SPECIES = ['CHAMBAN', 'SARDINE', 'KODANDE', 'MURU HEAD', 'GOLAI', 'THONDE', 'AILE', 'DISCO', 'MIX', 'PAMBOL', 'THAKATTE'];
+const DEFAULT_VEHICLES = ['KL 59Z 5206', 'KA 19D 7628', 'KA 19AE 6136', 'KA 09C 8942'];
 
 const getLocalDateString = (d = new Date()) => {
   const year = d.getFullYear();
@@ -32,9 +40,29 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
   const { activeBranchId, activeBranch } = useBranch();
   const queryClient = useQueryClient();
 
-  // Master Data hooks
+  // Master Data hooks (dynamic from PostgreSQL & cached in IndexedDB)
   const { data: partiesList = [], refetch: refetchParties } = useParties(activeBranchId);
   const { data: vehiclesList = [] } = useVehicles(activeBranchId);
+  const { data: fishTypesList = [] } = useFishTypes(activeBranchId);
+
+  // Quick-creation mutations on the fly
+  const createPartyMutation = useCreateQuickParty(activeBranchId);
+  const createFishTypeMutation = useCreateQuickFishType(activeBranchId);
+  const createVehicleMutation = useCreateQuickVehicle(activeBranchId);
+
+  // Dynamic quick-pick fish chips combining DB masters & defaults
+  const dynamicFishChips = useMemo(() => {
+    const fromDb = fishTypesList.map((f) => f.name.toUpperCase());
+    const combined = new Set([...fromDb, ...DEFAULT_FISH_SPECIES]);
+    return Array.from(combined);
+  }, [fishTypesList]);
+
+  // Dynamic quick-pick vehicle chips combining DB masters & defaults
+  const dynamicVehicleChips = useMemo(() => {
+    const fromDb = vehiclesList.map((v) => v.vehicle_no.toUpperCase());
+    const combined = new Set([...fromDb, ...DEFAULT_VEHICLES]);
+    return Array.from(combined).slice(0, 10);
+  }, [vehiclesList]);
 
   // Workflow Step: 'fish' (Step 1: Fish & Remarks) | 'weights' (Step 2: Vehicle & Weights)
   const [step, setStep] = useState('fish');
@@ -269,12 +297,13 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
       } else {
         const offlineEntry = {
           ...payload,
-          tempId: `offline_${Date.now()}`,
+          tempId: `offline_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
           branchId: activeBranchId,
           createdAt: new Date().toISOString(),
-          status: 'OFFLINE_PENDING',
+          status: 'QUEUED_SYNC',
         };
         await saveOfflineEntry(offlineEntry);
+        await registerBackgroundSync();
         await queryClient.invalidateQueries({ queryKey: ['entries'] });
         if (onEntryCreated) onEntryCreated(offlineEntry);
       }
@@ -352,10 +381,19 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
             {partySearch.trim() && !filteredParties.includes(partySearch.trim()) && (
               <button
                 type="button"
-                onClick={() => setPartySearch(partySearch.trim())}
-                className="text-xs font-bold px-3 py-1.5 rounded-xl border border-dashed border-amber-400 bg-amber-50 text-amber-800"
+                disabled={createPartyMutation.isPending}
+                onClick={async () => {
+                  const newName = partySearch.trim();
+                  try {
+                    await createPartyMutation.mutateAsync({ name: newName });
+                  } catch (err) {
+                    console.warn('[Weighbridge] Party quick-creation:', err.message);
+                  }
+                  setPartySearch(newName);
+                }}
+                className="text-xs font-bold px-3 py-1.5 rounded-xl border border-dashed border-amber-400 bg-amber-50 text-amber-800 hover:bg-amber-100 transition-all flex items-center gap-1"
               >
-                + Add "{partySearch.trim()}"
+                <Plus className="w-3.5 h-3.5" /> Add "{partySearch.trim()}" to Masters
               </button>
             )}
           </div>
@@ -476,7 +514,7 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
               Tap to Add Fish
             </div>
             <div className="flex flex-wrap gap-1.5">
-              {FISH_CHIPS.map((chip) => (
+              {dynamicFishChips.map((chip) => (
                 <button
                   key={chip}
                   type="button"
@@ -499,23 +537,30 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
               <div className="flex gap-2 mt-2">
                 <input
                   type="text"
-                  placeholder="Fish name"
+                  placeholder="Fish species name"
                   value={otherFishInput}
                   onChange={(e) => setOtherFishInput(e.target.value.toUpperCase())}
-                  className="flex-1 bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 text-xs font-bold"
+                  className="flex-1 bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-900"
                 />
                 <button
                   type="button"
-                  onClick={() => {
+                  disabled={createFishTypeMutation.isPending || !otherFishInput.trim()}
+                  onClick={async () => {
                     if (otherFishInput.trim()) {
-                      handleAddFish(otherFishInput.trim());
+                      const fishName = otherFishInput.trim().toUpperCase();
+                      try {
+                        await createFishTypeMutation.mutateAsync({ name: fishName });
+                      } catch (err) {
+                        console.warn('[Weighbridge] Fish quick-creation:', err.message);
+                      }
+                      handleAddFish(fishName);
                       setOtherFishInput('');
                       setShowOtherInput(false);
                     }
                   }}
-                  className="px-4 py-1.5 bg-amber-500 text-white rounded-xl text-xs font-bold"
+                  className="px-4 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold shadow-sm disabled:opacity-40"
                 >
-                  Add
+                  {createFishTypeMutation.isPending ? 'Saving...' : 'Add to Catalog'}
                 </button>
               </div>
             )}
@@ -611,9 +656,9 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
           </div>
         </div>
 
-        {/* Quick Recent Vehicles */}
+        {/* Quick Recent Vehicles from Masters DB */}
         <div className="flex gap-1.5 overflow-x-auto pt-1">
-          {RECENT_VEHICLES.map((v) => (
+          {dynamicVehicleChips.map((v) => (
             <button
               key={v}
               type="button"
@@ -627,6 +672,22 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
               {v}
             </button>
           ))}
+          {vehicleNo.trim() && !dynamicVehicleChips.includes(vehicleNo.trim()) && (
+            <button
+              type="button"
+              disabled={createVehicleMutation.isPending}
+              onClick={async () => {
+                try {
+                  await createVehicleMutation.mutateAsync({ vehicle_no: vehicleNo.trim() });
+                } catch (err) {
+                  console.warn('[Weighbridge] Vehicle quick-creation:', err.message);
+                }
+              }}
+              className="text-[11px] font-mono font-bold px-2.5 py-1 rounded-lg border border-dashed border-amber-400 bg-amber-50 text-amber-800 whitespace-nowrap"
+            >
+              + Save "{vehicleNo.trim()}" to Masters
+            </button>
+          )}
         </div>
       </div>
 

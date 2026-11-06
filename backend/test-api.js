@@ -202,6 +202,41 @@ async function runTests() {
     );
     assert(staffEditLockedEntry.status === 403, 'Server-side rate lock strictly blocks Staff edits once locked');
 
+    // 7b. Phase 5: Field Staff Flow & Offline Batch Sync (/api/entries/sync)
+    console.log('\n--- Test Group: Offline Batch Sync & Server-Lock Conflict Handling ---');
+    const syncRes = await request(
+      'POST',
+      '/entries/sync',
+      {
+        entries: [
+          {
+            tempId: 'offline_slip_1',
+            entry_date: new Date().toISOString().split('T')[0],
+            party_name: 'Offline Sync Seafoods',
+            vehicle_no: 'KA 19 EF 9999',
+            gross_loaded_kg: 3200,
+            empty_tare_kg: 1000,
+            ice_water_kg: 200,
+            remarks: '50 SARDINE 100% 20C',
+            boxes: [{ fish_name: 'SARDINE', box_count: 50, mix_percentage: 100 }],
+          },
+          // Simulate conflicting edit on locked entry
+          {
+            tempId: 'offline_conflict_slip',
+            id: entry.id,
+            gross_loaded_kg: 1800,
+            remarks: 'Staff offline attempted edit on locked slip',
+          },
+        ],
+      },
+      { Authorization: `Bearer ${staffToken}`, 'X-Branch-ID': branchId }
+    );
+    assert(syncRes.status === 200, 'POST /api/entries/sync responds 200');
+    assert(syncRes.body.synced.length === 1, 'Offline new entry synced successfully');
+    assert(syncRes.body.synced[0].tempId === 'offline_slip_1', 'Synced result includes original tempId');
+    assert(syncRes.body.conflicts.length === 1, 'Server-lock conflict correctly detected');
+    assert(syncRes.body.conflicts[0].status === 'HOLD_REVIEW', 'Conflicting entry routed to HOLD_REVIEW for Admin Review');
+
     // 8. Masters Merging by billingAdmin (Single Office Login capability)
     console.log('\n--- Test Group: Master Merging by billingAdmin ---');
     // Create duplicate party
