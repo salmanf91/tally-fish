@@ -1,26 +1,32 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Scale, Lock, Clock, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Scale, Lock, Clock, Plus, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 import { useBranch } from '../context/BranchContext';
 import { api } from '../services/api';
+
+const getLocalDateString = (d = new Date()) => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
 export default function TodayView({ onNewEntry, onEditEntry, onViewLockedEntry }) {
   const { activeBranchId, activeBranch } = useBranch();
 
-  // Selected date
-  const [selectedDate, setSelectedDate] = useState(() => {
-    return new Date().toISOString().split('T')[0];
-  });
+  // Selected date (local timezone)
+  const [selectedDate, setSelectedDate] = useState(() => getLocalDateString());
 
   const [filter, setFilter] = useState('All'); // 'All' | 'Rate' | 'Done'
 
-  const { data: allEntries = [], isLoading } = useQuery({
+  const { data: allEntries = [], isLoading, refetch, isFetching } = useQuery({
     queryKey: ['entries', activeBranchId],
     queryFn: async () => {
       const res = await api.get('/entries');
       return res.data || [];
     },
     enabled: !!activeBranchId,
+    refetchOnMount: 'always',
   });
 
   // Filter entries by selected date
@@ -39,9 +45,10 @@ export default function TodayView({ onNewEntry, onEditEntry, onViewLockedEntry }
   });
 
   const shiftDate = (days) => {
-    const current = new Date(selectedDate);
+    const parts = selectedDate.split('-');
+    const current = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
     current.setDate(current.getDate() + days);
-    setSelectedDate(current.toISOString().split('T')[0]);
+    setSelectedDate(getLocalDateString(current));
   };
 
   return (
@@ -54,12 +61,21 @@ export default function TodayView({ onNewEntry, onEditEntry, onViewLockedEntry }
             Branch: <strong className="text-slate-800">{activeBranch?.branch_name}</strong>
           </p>
         </div>
-        <button
-          onClick={onNewEntry}
-          className="text-xs font-bold px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white flex items-center gap-1 shadow-sm transition-all"
-        >
-          <Plus className="w-4 h-4" /> New Entry
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => refetch()}
+            title="Refresh entries"
+            className="p-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 transition-all"
+          >
+            <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin text-amber-600' : ''}`} />
+          </button>
+          <button
+            onClick={onNewEntry}
+            className="text-xs font-bold px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white flex items-center gap-1 shadow-sm transition-all"
+          >
+            <Plus className="w-4 h-4" /> New Entry
+          </button>
+        </div>
       </div>
 
       {/* Date Navigation */}
@@ -82,6 +98,14 @@ export default function TodayView({ onNewEntry, onEditEntry, onViewLockedEntry }
         >
           <ChevronRight className="w-4 h-4" />
         </button>
+        {selectedDate !== getLocalDateString() && (
+          <button
+            onClick={() => setSelectedDate(getLocalDateString())}
+            className="px-2.5 py-2 rounded-xl border border-amber-300 bg-amber-50 text-amber-800 font-bold text-xs"
+          >
+            Today
+          </button>
+        )}
       </div>
 
       {/* Quick Stats Summary */}
@@ -125,8 +149,16 @@ export default function TodayView({ onNewEntry, onEditEntry, onViewLockedEntry }
       {isLoading ? (
         <div className="text-xs text-slate-400 p-8 text-center">Loading slips...</div>
       ) : filteredList.length === 0 ? (
-        <div className="light-card p-8 rounded-2xl text-center text-slate-400 text-xs">
-          No slips for this day. Tap "New Entry" to record a truck.
+        <div className="light-card p-8 rounded-2xl text-center space-y-2">
+          <p className="text-slate-500 text-xs font-medium">
+            No slips found for {selectedDate}.
+          </p>
+          <button
+            onClick={onNewEntry}
+            className="text-xs font-bold text-amber-600 hover:text-amber-700 underline"
+          >
+            + Create New Weighbridge Entry
+          </button>
         </div>
       ) : (
         <div className="space-y-2">
@@ -187,4 +219,3 @@ export default function TodayView({ onNewEntry, onEditEntry, onViewLockedEntry }
     </div>
   );
 }
-

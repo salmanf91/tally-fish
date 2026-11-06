@@ -90,6 +90,7 @@ function MainApp() {
         <WeighbridgeView
           editEntry={editingEntry}
           onEntryCreated={() => {
+            queryClient.invalidateQueries({ queryKey: ['entries'] });
             setEditingEntry(null);
             setActiveTab('today');
           }}

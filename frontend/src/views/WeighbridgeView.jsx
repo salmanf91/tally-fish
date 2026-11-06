@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Scale,
   Truck,
@@ -20,8 +21,16 @@ import NumericKeypad from '../components/common/NumericKeypad';
 const FISH_CHIPS = ['CHAMBAN', 'SARDINE', 'KODANDE', 'MURU HEAD', 'GOLAI', 'THONDE', 'AILE', 'DISCO', 'MIX', 'PAMBOL', 'THAKATTE'];
 const RECENT_VEHICLES = ['KL 59Z 5206', 'KA 19D 7628', 'KA 19AE 6136', 'KA 09C 8942'];
 
+const getLocalDateString = (d = new Date()) => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCancel }) {
   const { activeBranchId, activeBranch } = useBranch();
+  const queryClient = useQueryClient();
 
   // Master Data hooks
   const { data: partiesList = [], refetch: refetchParties } = useParties(activeBranchId);
@@ -32,7 +41,7 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
 
   // Step 1 State: Fish & Remarks
   const [entryDate, setEntryDate] = useState(() => {
-    return editEntry?.entry_date || new Date().toISOString().split('T')[0];
+    return editEntry?.entry_date ? editEntry.entry_date.split('T')[0] : getLocalDateString();
   });
   const [partySearch, setPartySearch] = useState(() => editEntry?.party_name || '');
   const [selectedParty, setSelectedParty] = useState(() => {
@@ -255,6 +264,7 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
     try {
       if (navigator.onLine) {
         const res = await api.post('/entries', payload);
+        await queryClient.invalidateQueries({ queryKey: ['entries'] });
         if (onEntryCreated) onEntryCreated(res.data);
       } else {
         const offlineEntry = {
@@ -265,6 +275,7 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
           status: 'OFFLINE_PENDING',
         };
         await saveOfflineEntry(offlineEntry);
+        await queryClient.invalidateQueries({ queryKey: ['entries'] });
         if (onEntryCreated) onEntryCreated(offlineEntry);
       }
     } catch (err) {

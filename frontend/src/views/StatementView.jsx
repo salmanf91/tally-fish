@@ -31,7 +31,14 @@ export default function StatementView({ onNavigateToRates }) {
   const isBilling = activeBranch?.role === 'billingAdmin';
   const isOwner = activeBranch?.role === 'owner';
 
-  const TODAY = new Date().toISOString().split('T')[0];
+  const getLocalDateString = (d = new Date()) => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const TODAY = getLocalDateString();
 
   // Filters
   const [fromDate, setFromDate] = useState(TODAY);
