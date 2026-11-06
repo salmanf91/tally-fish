@@ -5,6 +5,7 @@ const {
   generateNarrativeRemarks,
 } = require('../utils/calculations');
 const { recordAuditLog } = require('../utils/auditLogger');
+const { eventBus } = require('../notifications');
 
 /**
  * POST /api/entries
@@ -278,6 +279,13 @@ async function createEntry(req, res, next) {
         boxes: savedBoxes,
       };
     }, { actorId, branchId });
+
+    // Asynchronously trigger entry:created event for Web Push notification dispatch
+    try {
+      eventBus.emit('entry:created', entryResult);
+    } catch (eventErr) {
+      console.error('[EventBus] Error dispatching entry:created event:', eventErr.message);
+    }
 
     return res.status(201).json({
       success: true,

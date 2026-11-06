@@ -14,5 +14,9 @@ module.exports = {
     password: process.env.PGPASSWORD,
     database: process.env.PGDATABASE || 'tally_fish_dev',
   },
+  vapid: {
+    publicKey: process.env.VAPID_PUBLIC_KEY || '',
+    privateKey: process.env.VAPID_PRIVATE_KEY || '',
+    subject: process.env.VAPID_SUBJECT || 'mailto:admin@indofishmeal.com',
+  },
 };
-

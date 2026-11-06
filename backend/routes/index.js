@@ -4,10 +4,12 @@ const router = express.Router();
 const authRoutes = require('./authRoutes');
 const mastersRoutes = require('./mastersRoutes');
 const entriesRoutes = require('./entriesRoutes');
+const notificationsRoutes = require('./notificationsRoutes');
 
 router.use('/auth', authRoutes);
 router.use('/masters', mastersRoutes);
 router.use('/entries', entriesRoutes);
+router.use('/notifications', notificationsRoutes);
 
 // Health check endpoint
 router.get('/health', (req, res) => {
@@ -19,4 +21,3 @@ router.get('/health', (req, res) => {
 });
 
 module.exports = router;
-
