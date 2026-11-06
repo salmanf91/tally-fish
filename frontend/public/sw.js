@@ -3,7 +3,7 @@
  * Standalone PWA offline cache, App Shell lifecycle, and W3C Web Push handling
  */
 
-const CACHE_NAME = 'tally-fish-v2';
+const CACHE_NAME = 'tally-fish-v3';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -11,25 +11,31 @@ const STATIC_ASSETS = [
   '/icon.svg',
 ];
 
-// 1. Install: Precache App Shell
+const isLocalhost = self.location.hostname === 'localhost' || self.location.hostname === '127.0.0.1';
+
+// 1. Install: Skip waiting immediately
 self.addEventListener('install', (event) => {
+  self.skipWaiting();
+  if (isLocalhost) {
+    // In local dev, do not precache anything
+    return;
+  }
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       console.log('[SW] Precaching App Shell assets');
       return cache.addAll(STATIC_ASSETS);
     })
   );
-  self.skipWaiting();
 });
 
-// 2. Activate: Clean up old cache versions
+// 2. Activate: Clear all caches on localhost or purge deprecated versions
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
       return Promise.all(
         keys.map((key) => {
-          if (key !== CACHE_NAME) {
-            console.log('[SW] Removing deprecated cache:', key);
+          if (isLocalhost || key !== CACHE_NAME) {
+            console.log('[SW] Deleting cache:', key);
             return caches.delete(key);
           }
         })
@@ -39,10 +45,15 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// 3. Fetch: Stale-While-Revalidate for app assets, Network-First for API
+// 3. Fetch: Bypass completely on localhost, Stale-While-Revalidate in production
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
+
+  // If on localhost or 127.0.0.1, NEVER intercept or cache
+  if (isLocalhost || url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
+    return;
+  }
 
   // Skip non-GET requests (handled by client-side IndexedDB offline queue)
   if (request.method !== 'GET') {
