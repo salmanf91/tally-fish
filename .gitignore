@@ -28,6 +28,9 @@ coverage/
 .temp/
 .cache/
 
+# Local tools and collections
+postman/
+
 # OS and Editor metadata
 .DS_Store
 Thumbs.db
@@ -35,4 +38,3 @@ Thumbs.db
 .vscode/
 *.sublime-project
 *.sublime-workspace
-

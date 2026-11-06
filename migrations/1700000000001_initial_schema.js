@@ -118,7 +118,7 @@ exports.up = (pgm) => {
     role: {
       type: 'varchar(20)',
       notNull: true,
-      check: "role IN ('staff', 'staffAdmin', 'owner', 'billingAdmin')",
+      check: "role IN ('staffAdmin', 'owner', 'billingAdmin')",
     },
     created_at: {
       type: 'timestamptz',

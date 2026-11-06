@@ -18,10 +18,10 @@ router.get(
   entriesController.getEntries
 );
 
-// Create entry: Staff or Office (Validates party, vehicle, fish_types, computes net_kg)
+// Create entry: staffAdmin, billingAdmin, or owner (computes net_kg)
 router.post(
   '/',
-  requireBranchRole(['staff', 'billingAdmin', 'staffAdmin', 'owner']),
+  requireBranchRole(['staffAdmin', 'billingAdmin', 'owner']),
   entriesController.createEntry
 );
 
@@ -32,7 +32,7 @@ router.get(
   entriesController.getEntryById
 );
 
-// Update entry (Enforces rate locking: strictly blocks staff if rates are set)
+// Update entry (Enforces rate locking: strictly blocks staffAdmin if rates are set)
 router.put(
   '/:id',
   requireBranchRole(),
@@ -43,17 +43,17 @@ router.put(
 // RATES (/api/entries/:id/rates)
 // =============================================================================
 
-// Set rates: Office only (billingAdmin, staffAdmin, owner)
+// Set rates: Office only (billingAdmin, owner)
 router.post(
   '/:id/rates',
-  requireBranchRole(['owner', 'billingAdmin', 'staffAdmin']),
+  requireBranchRole(['billingAdmin', 'owner']),
   ratesController.setEntryRates
 );
 
-// Get entry rates: Office only (billingAdmin, staffAdmin, owner)
+// Get entry rates: Office only (billingAdmin, owner)
 router.get(
   '/:id/rates',
-  requireBranchRole(['owner', 'billingAdmin', 'staffAdmin']),
+  requireBranchRole(['billingAdmin', 'owner']),
   ratesController.getEntryRates
 );
 

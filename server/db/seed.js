@@ -56,14 +56,13 @@ async function seed() {
     const staffId = staffUser.rows[0].id;
     const billingId = billingUser.rows[0].id;
 
-    // 3. User Branch Roles
-    // Admin has owner/staffAdmin roles, billing has billingAdmin, staff has staff
+    // 3. User Branch Roles: Strictly 3 roles (owner, staffAdmin, billingAdmin)
     await client.query(`
       INSERT INTO user_branch_roles (id, user_id, branch_id, role)
       VALUES
         (gen_random_uuid(), '${adminId}', '${ullalId}', 'owner'),
-        (gen_random_uuid(), '${adminId}', '${mnglrId}', 'staffAdmin'),
-        (gen_random_uuid(), '${staffId}', '${ullalId}', 'staff'),
+        (gen_random_uuid(), '${adminId}', '${mnglrId}', 'owner'),
+        (gen_random_uuid(), '${staffId}', '${ullalId}', 'staffAdmin'),
         (gen_random_uuid(), '${billingId}', '${ullalId}', 'billingAdmin')
       ON CONFLICT (user_id, branch_id, role) DO NOTHING;
     `);

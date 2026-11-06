@@ -55,7 +55,7 @@ async function createParty(req, res, next) {
     // If staff creates: automatically scope to current branch
     // If admin creates: allow global (null) or specified branch
     const effectiveBranchId =
-      req.currentRole === 'staff'
+      req.currentRole === 'staffAdmin'
         ? req.branchId
         : branch_id !== undefined
         ? branch_id
@@ -309,7 +309,7 @@ async function createVehicle(req, res, next) {
     }
 
     const effectiveBranchId =
-      req.currentRole === 'staff'
+      req.currentRole === 'staffAdmin'
         ? req.branchId
         : branch_id !== undefined
         ? branch_id
@@ -545,7 +545,7 @@ async function createFishType(req, res, next) {
     }
 
     const effectiveBranchId =
-      req.currentRole === 'staff'
+      req.currentRole === 'staffAdmin'
         ? req.branchId
         : branch_id !== undefined
         ? branch_id
