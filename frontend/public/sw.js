@@ -3,7 +3,7 @@
  * Standalone PWA offline cache, App Shell lifecycle, and W3C Web Push handling
  */
 
-const CACHE_NAME = 'tally-fish-v1';
+const CACHE_NAME = 'tally-fish-v2';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -54,9 +54,13 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // In development, skip caching Vite dev server internals & HMR
+  // In development (localhost, /src/, Vite internals), bypass SW caching completely
   if (
+    url.hostname === 'localhost' ||
+    url.hostname === '127.0.0.1' ||
+    url.pathname.startsWith('/src/') ||
     url.pathname.startsWith('/@') ||
+    url.pathname.startsWith('/node_modules/') ||
     url.pathname.includes('__vite_ping') ||
     url.pathname.includes('.hot-update.') ||
     url.searchParams.has('t')

@@ -54,17 +54,35 @@ function MainApp() {
   useEffect(() => {
     initSyncManager(queryClient);
 
-    if ('serviceWorker' in navigator && process.env.NODE_ENV !== 'test') {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker
-          .register('/sw.js')
-          .then((reg) => {
-            console.log('[PWA] Service Worker registered with scope:', reg.scope);
-          })
-          .catch((err) => {
-            console.warn('[PWA] Service Worker registration failed:', err);
+    if ('serviceWorker' in navigator) {
+      if (import.meta.env.DEV) {
+        // In local development, unregister old service workers so Vite HMR and styles load fresh
+        navigator.serviceWorker.getRegistrations().then((registrations) => {
+          for (const reg of registrations) {
+            reg.unregister();
+            console.log('[PWA] Unregistered dev Service Worker:', reg.scope);
+          }
+        });
+        // Clear old caches that may be holding unstyled HTML/CSS
+        if ('caches' in window) {
+          caches.keys().then((names) => {
+            for (const name of names) {
+              caches.delete(name);
+            }
           });
-      });
+        }
+      } else {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker
+            .register('/sw.js')
+            .then((reg) => {
+              console.log('[PWA] Service Worker registered with scope:', reg.scope);
+            })
+            .catch((err) => {
+              console.warn('[PWA] Service Worker registration failed:', err);
+            });
+        });
+      }
     }
   }, []);
 
