@@ -3,6 +3,7 @@ const {
   calculateNetWeight,
   validateBoxMixPercentages,
   generateNarrativeRemarks,
+  calculateWeightedAverageRate,
 } = require('../utils/calculations');
 const { recordAuditLog } = require('../utils/auditLogger');
 const { eventBus } = require('../notifications');
@@ -375,10 +376,25 @@ async function getEntries(req, res, next) {
 
     const result = await db.query(sql, params);
 
+    const enrichedRows = result.rows.map((row) => {
+      if (isStaff || !Array.isArray(row.rates) || row.rates.length === 0) {
+        return row;
+      }
+      const boxes = Array.isArray(row.boxes) ? row.boxes : [];
+      const { averageRate } = calculateWeightedAverageRate(boxes, row.rates);
+      const netKg = Number(row.net_kg) || 0;
+      const totalAmount = Math.round(netKg * averageRate * 100) / 100;
+      return {
+        ...row,
+        average_rate: averageRate,
+        total_amount: totalAmount,
+      };
+    });
+
     return res.status(200).json({
       success: true,
-      count: result.rows.length,
-      data: result.rows,
+      count: enrichedRows.length,
+      data: enrichedRows,
     });
   } catch (err) {
     next(err);
