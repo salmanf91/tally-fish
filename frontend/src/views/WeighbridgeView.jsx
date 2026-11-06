@@ -100,19 +100,28 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
   // Handle adding fish species to lines
   const handleAddFish = (fishName) => {
     if (mixTargetIndex !== null) {
-      // Mix into target line
-      setLines((prev) => {
-        const next = [...prev];
-        next[mixTargetIndex].parts.push({ fish: fishName, pct: '50', c: '' });
-        // adjust first part to 50%
-        if (next[mixTargetIndex].parts[0]) {
-          next[mixTargetIndex].parts[0].pct = '50';
-        }
-        return next;
-      });
+      const targetIdx = mixTargetIndex;
       setMixTargetIndex(null);
+      // Mix into target line immutably
+      setLines((prev) =>
+        prev.map((line, idx) => {
+          if (idx !== targetIdx) return line;
+          const currentParts = line.parts;
+          const updatedParts = currentParts.map((part, pIdx) => {
+            if (pIdx === 0 && currentParts.length === 1 && (part.pct === '100' || !part.pct)) {
+              return { ...part, pct: '50' };
+            }
+            return { ...part };
+          });
+          const newPct = currentParts.length === 1 ? '50' : '0';
+          return {
+            ...line,
+            parts: [...updatedParts, { fish: fishName, pct: newPct, c: '' }],
+          };
+        })
+      );
     } else {
-      // Add as standalone box line
+      // Add as standalone box line immutably
       setLines((prev) => [
         ...prev,
         { boxes: '', parts: [{ fish: fishName, pct: '100', c: '' }] },
@@ -121,38 +130,54 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
   };
 
   const handleUpdateBoxCount = (lineIdx, count) => {
-    setLines((prev) => {
-      const next = [...prev];
-      next[lineIdx].boxes = count.replace(/\D/g, '');
-      return next;
-    });
+    const clean = count.replace(/\D/g, '');
+    setLines((prev) =>
+      prev.map((line, idx) => (idx === lineIdx ? { ...line, boxes: clean } : line))
+    );
   };
 
   const handleUpdatePartPct = (lineIdx, partIdx, pct) => {
-    setLines((prev) => {
-      const next = [...prev];
-      next[lineIdx].parts[partIdx].pct = pct.replace(/\D/g, '');
-      return next;
-    });
+    const clean = pct.replace(/\D/g, '');
+    setLines((prev) =>
+      prev.map((line, idx) => {
+        if (idx !== lineIdx) return line;
+        return {
+          ...line,
+          parts: line.parts.map((part, pIdx) =>
+            pIdx === partIdx ? { ...part, pct: clean } : part
+          ),
+        };
+      })
+    );
   };
 
   const handleUpdatePartCount = (lineIdx, partIdx, count) => {
-    setLines((prev) => {
-      const next = [...prev];
-      next[lineIdx].parts[partIdx].c = count.replace(/\D/g, '');
-      return next;
-    });
+    const clean = count.replace(/\D/g, '');
+    setLines((prev) =>
+      prev.map((line, idx) => {
+        if (idx !== lineIdx) return line;
+        return {
+          ...line,
+          parts: line.parts.map((part, pIdx) =>
+            pIdx === partIdx ? { ...part, c: clean } : part
+          ),
+        };
+      })
+    );
   };
 
   const handleRemovePart = (lineIdx, partIdx) => {
-    setLines((prev) => {
-      const next = [...prev];
-      next[lineIdx].parts.splice(partIdx, 1);
-      if (next[lineIdx].parts.length === 0) {
-        next.splice(lineIdx, 1);
-      }
-      return next;
-    });
+    setLines((prev) =>
+      prev
+        .map((line, idx) => {
+          if (idx !== lineIdx) return line;
+          return {
+            ...line,
+            parts: line.parts.filter((_, pIdx) => pIdx !== partIdx),
+          };
+        })
+        .filter((line) => line.parts.length > 0)
+    );
   };
 
   // Step 1 Validation
