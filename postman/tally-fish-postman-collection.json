@@ -1,0 +1,360 @@
+{
+  "info": {
+    "name": "Tally Fish API - Daily Statement PWA",
+    "_postman_id": "7a35c1f0-2819-4a41-b089-9e81b67f1001",
+    "description": "Postman collection for Tally Fish Daily Statement Backend Engine.\n\nIncludes Authentication, Masters CRUD & Merging, Weighbridge Entry Capture, and Rate Pricing with Server-side Locking.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000/api",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "branchId",
+      "value": "1b74dc0f-3ba0-47eb-af0a-2cc9012ea7d6",
+      "type": "string"
+    },
+    {
+      "key": "entryId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Authentication",
+      "item": [
+        {
+          "name": "Login as Owner (PIN 1234)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('token', json.token);",
+                  "    if (json.branches && json.branches.length > 0) {",
+                  "        pm.collectionVariables.set('branchId', json.branches[0].branch_id);",
+                  "    }",
+                  "    console.log('Saved token and branchId to collection variables');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admin\",\n  \"pin\": \"1234\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] }
+          }
+        },
+        {
+          "name": "Login as BillingAdmin (PIN 2222)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('token', json.token);",
+                  "    if (json.branches && json.branches.length > 0) {",
+                  "        pm.collectionVariables.set('branchId', json.branches[0].branch_id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"billing_user\",\n  \"pin\": \"2222\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] }
+          }
+        },
+        {
+          "name": "Login as Staff (PIN 1111)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('token', json.token);",
+                  "    if (json.branches && json.branches.length > 0) {",
+                  "        pm.collectionVariables.set('branchId', json.branches[0].branch_id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"staff_ullal\",\n  \"pin\": \"1111\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] }
+          }
+        },
+        {
+          "name": "Get Current Profile (/me)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Branch-ID", "value": "{{branchId}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/auth/me", "host": ["{{baseUrl}}"], "path": ["auth", "me"] }
+          }
+        },
+        {
+          "name": "Reset Staff PIN (BillingAdmin/Owner)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Branch-ID", "value": "{{branchId}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"USER_UUID_HERE\",\n  \"newPin\": \"4321\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/reset-pin", "host": ["{{baseUrl}}"], "path": ["auth", "reset-pin"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Masters",
+      "item": [
+        {
+          "name": "List Parties",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Branch-ID", "value": "{{branchId}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/masters/parties", "host": ["{{baseUrl}}"], "path": ["masters", "parties"] }
+          }
+        },
+        {
+          "name": "Quick-Create Party (Staff on the fly)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Branch-ID", "value": "{{branchId}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Malpe Trawlers Union\",\n  \"phone\": \"+919876501234\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/masters/parties", "host": ["{{baseUrl}}"], "path": ["masters", "parties"] }
+          }
+        },
+        {
+          "name": "Merge Duplicate Parties (BillingAdmin/Owner)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Branch-ID", "value": "{{branchId}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sourcePartyId\": \"SOURCE_PARTY_UUID\",\n  \"targetPartyId\": \"TARGET_PARTY_UUID\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/masters/parties/merge", "host": ["{{baseUrl}}"], "path": ["masters", "parties", "merge"] }
+          }
+        },
+        {
+          "name": "List Vehicles",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Branch-ID", "value": "{{branchId}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/masters/vehicles", "host": ["{{baseUrl}}"], "path": ["masters", "vehicles"] }
+          }
+        },
+        {
+          "name": "Quick-Create Vehicle (Staff on the fly)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Branch-ID", "value": "{{branchId}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vehicle_no\": \"KA-19-EF-9999\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/masters/vehicles", "host": ["{{baseUrl}}"], "path": ["masters", "vehicles"] }
+          }
+        },
+        {
+          "name": "List Fish Types",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Branch-ID", "value": "{{branchId}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/masters/fish-types", "host": ["{{baseUrl}}"], "path": ["masters", "fish-types"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Purchase Entries",
+      "item": [
+        {
+          "name": "Create Weighbridge Entry (Staff/Office)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('entryId', json.data.id);",
+                  "    console.log('Saved entryId: ' + json.data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Branch-ID", "value": "{{branchId}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"party_name\": \"Coastal Catchers Ltd\",\n  \"vehicle_no\": \"KA-19-AB-1234\",\n  \"gross_loaded_kg\": 1800,\n  \"empty_tare_kg\": 500,\n  \"ice_water_kg\": 100,\n  \"c_value\": 10.5,\n  \"boxes\": [\n    {\n      \"fish_name\": \"CHAMBAN\",\n      \"box_count\": 60,\n      \"mix_percentage\": 100\n    },\n    {\n      \"fish_name\": \"SARDINE\",\n      \"box_count\": 20,\n      \"mix_percentage\": 100\n    }\n  ]\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/entries", "host": ["{{baseUrl}}"], "path": ["entries"] }
+          }
+        },
+        {
+          "name": "List Entries for Branch",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Branch-ID", "value": "{{branchId}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/entries", "host": ["{{baseUrl}}"], "path": ["entries"] }
+          }
+        },
+        {
+          "name": "Get Entry by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Branch-ID", "value": "{{branchId}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/entries/{{entryId}}", "host": ["{{baseUrl}}"], "path": ["entries", "{{entryId}}"] }
+          }
+        },
+        {
+          "name": "Update Entry (Allowed before rate locking)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Branch-ID", "value": "{{branchId}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"gross_loaded_kg\": 1850,\n  \"empty_tare_kg\": 500,\n  \"ice_water_kg\": 100\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/entries/{{entryId}}", "host": ["{{baseUrl}}"], "path": ["entries", "{{entryId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Rate Fixing & Locking",
+      "item": [
+        {
+          "name": "Set Rates & Lock Entry (BillingAdmin/Owner)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Branch-ID", "value": "{{branchId}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rates\": [\n    {\n      \"fish_name\": \"CHAMBAN\",\n      \"rate_per_kg\": 48.00\n    },\n    {\n      \"fish_name\": \"SARDINE\",\n      \"rate_per_kg\": 32.00\n    }\n  ]\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/entries/{{entryId}}/rates", "host": ["{{baseUrl}}"], "path": ["entries", "{{entryId}}", "rates"] }
+          }
+        },
+        {
+          "name": "Get Entry Rates (Office only)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Branch-ID", "value": "{{branchId}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/entries/{{entryId}}/rates", "host": ["{{baseUrl}}"], "path": ["entries", "{{entryId}}", "rates"] }
+          }
+        },
+        {
+          "name": "Verify Staff Edits Blocked on Locked Entry (Expect 403)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Branch-ID", "value": "{{branchId}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"gross_loaded_kg\": 2000\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/entries/{{entryId}}", "host": ["{{baseUrl}}"], "path": ["entries", "{{entryId}}"] }
+          }
+        }
+      ]
+    }
+  ]
+}
