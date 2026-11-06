@@ -6,6 +6,9 @@
   "scripts": {
     "start": "node backend/index.js",
     "dev": "node --watch backend/index.js",
+    "dev:backend": "node --watch backend/index.js",
+    "dev:frontend": "npm run dev --prefix frontend",
+    "build:frontend": "npm run build --prefix frontend",
     "seed": "node backend/db/seed.js",
     "test:api": "node backend/test-api.js",
     "migrate:up": "node-pg-migrate --envPath .env up",

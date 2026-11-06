@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="marineGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f2038"/>
+      <stop offset="100%" stop-color="#070d19"/>
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fbbf24"/>
+      <stop offset="100%" stop-color="#d97706"/>
+    </linearGradient>
+    <linearGradient id="cyanGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#0284c7"/>
+    </linearGradient>
+  </defs>
+  <!-- Background Badge -->
+  <rect width="512" height="512" rx="128" fill="url(#marineGrad)"/>
+  <rect x="12" y="12" width="488" height="488" rx="116" stroke="rgba(255,255,255,0.08)" stroke-width="6"/>
+
+  <!-- Fish Emblem -->
+  <path d="M120 256C120 200 170 160 250 160C340 160 410 210 440 256C410 302 340 352 250 352C170 352 120 312 120 256Z" fill="url(#cyanGrad)" fill-opacity="0.2" stroke="url(#cyanGrad)" stroke-width="16" stroke-linejoin="round"/>
+  <!-- Tail fin -->
+  <path d="M140 256L70 190V322L140 256Z" fill="url(#cyanGrad)" stroke="url(#cyanGrad)" stroke-width="14" stroke-linejoin="round"/>
+  <!-- Fish Eye -->
+  <circle cx="360" cy="240" r="16" fill="#f8fafc"/>
+  <circle cx="364" cy="238" r="8" fill="#081120"/>
+
+  <!-- Weighing Scale / Tally Balance Beam (Gold) -->
+  <path d="M180 380H332M256 320V420" stroke="url(#goldGrad)" stroke-width="16" stroke-linecap="round"/>
+  <circle cx="256" cy="320" r="14" fill="url(#goldGrad)"/>
+</svg>
+

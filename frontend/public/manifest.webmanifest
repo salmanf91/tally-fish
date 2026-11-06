@@ -1,0 +1,22 @@
+{
+  "name": "Tally Fish - Procurement & Weighbridge",
+  "short_name": "Tally Fish",
+  "description": "Multi-Branch Raw Fish Procurement, Weighbridge Operations & Rate Fixing PWA",
+  "start_url": "/",
+  "id": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#070d19",
+  "theme_color": "#081120",
+  "categories": ["business", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
+
