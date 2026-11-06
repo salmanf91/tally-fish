@@ -15,3 +15,4 @@ module.exports = {
     database: process.env.PGDATABASE || 'tally_fish_dev',
   },
 };
+

@@ -295,7 +295,7 @@ async function createEntry(req, res, next) {
 async function getEntries(req, res, next) {
   try {
     const branchId = req.branchId;
-    const isStaff = req.canonicalRole === 'staff';
+    const isStaff = req.currentRole === 'staff';
     const { startDate, endDate, date, party_id, status, limit = 50, offset = 0 } = req.query;
 
     let sql = `
@@ -384,7 +384,7 @@ async function getEntryById(req, res, next) {
   try {
     const { id } = req.params;
     const branchId = req.branchId;
-    const isStaff = req.canonicalRole === 'staff';
+    const isStaff = req.currentRole === 'staff';
 
     const entryRes = await db.query(
       'SELECT * FROM entries WHERE id = $1 AND branch_id = $2',
@@ -425,7 +425,7 @@ async function updateEntry(req, res, next) {
   try {
     const { id } = req.params;
     const branchId = req.branchId;
-    const isStaff = req.canonicalRole === 'staff';
+    const isStaff = req.currentRole === 'staff';
     const actorId = req.user.id;
 
     // Check entry existence and lock state
@@ -604,3 +604,4 @@ module.exports = {
   getEntryById,
   updateEntry,
 };
+

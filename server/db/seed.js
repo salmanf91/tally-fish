@@ -57,14 +57,14 @@ async function seed() {
     const billingId = billingUser.rows[0].id;
 
     // 3. User Branch Roles
-    // Admin has admin role in both branches
+    // Admin has owner/staffAdmin roles, billing has billingAdmin, staff has staff
     await client.query(`
       INSERT INTO user_branch_roles (id, user_id, branch_id, role)
       VALUES
-        (gen_random_uuid(), '${adminId}', '${ullalId}', 'admin'),
-        (gen_random_uuid(), '${adminId}', '${mnglrId}', 'admin'),
+        (gen_random_uuid(), '${adminId}', '${ullalId}', 'owner'),
+        (gen_random_uuid(), '${adminId}', '${mnglrId}', 'staffAdmin'),
         (gen_random_uuid(), '${staffId}', '${ullalId}', 'staff'),
-        (gen_random_uuid(), '${billingId}', '${ullalId}', 'billing')
+        (gen_random_uuid(), '${billingId}', '${ullalId}', 'billingAdmin')
       ON CONFLICT (user_id, branch_id, role) DO NOTHING;
     `);
     console.log('[Seed] Users and branch roles assigned.');
@@ -123,3 +123,4 @@ if (require.main === module) {
 }
 
 module.exports = seed;
+

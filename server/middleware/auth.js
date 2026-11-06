@@ -3,27 +3,6 @@ const config = require('../config');
 const db = require('../db');
 
 /**
- * Standardizes role names between API aliases and database values
- * Matches 'staffAdmin', 'owner', 'admin' -> 'admin'
- * Matches 'billingAdmin', 'billing' -> 'billing'
- * Matches 'staff' -> 'staff'
- */
-const CANONICAL_ROLE_MAP = {
-  staffadmin: 'admin',
-  owner: 'admin',
-  admin: 'admin',
-  billingadmin: 'billing',
-  billing: 'billing',
-  staff: 'staff',
-};
-
-function normalizeRole(role) {
-  if (!role) return '';
-  const key = String(role).trim().toLowerCase();
-  return CANONICAL_ROLE_MAP[key] || key;
-}
-
-/**
  * Middleware: Verifies JWT token and attaches authenticated user to req.user
  */
 function authenticateToken(req, res, next) {
@@ -52,8 +31,9 @@ function authenticateToken(req, res, next) {
 }
 
 /**
- * Middleware: Enforces branch context and role requirements
+ * Middleware: Enforces branch context and exact role authorization
  * Reads the X-Branch-ID header and verifies user's role against allowedRoles
+ * Directly checks explicit roles: 'staff', 'staffAdmin', 'owner', 'billingAdmin'
  *
  * Example: requireBranchRole(['staffAdmin', 'owner', 'billingAdmin'])
  *
@@ -110,16 +90,9 @@ function requireBranchRole(allowedRoles = []) {
         });
       }
 
-      // Check role authorization if specific roles were specified
+      // Direct exact role check against allowed roles
       if (Array.isArray(allowedRoles) && allowedRoles.length > 0) {
-        const canonicalUserRole = normalizeRole(userRole);
-        const canonicalAllowed = allowedRoles.map(normalizeRole);
-
-        const hasPermission =
-          canonicalAllowed.includes(canonicalUserRole) ||
-          allowedRoles.includes(userRole);
-
-        if (!hasPermission) {
+        if (!allowedRoles.includes(userRole)) {
           return res.status(403).json({
             success: false,
             error: `Access denied. Role "${userRole}" is not authorized for this action. Allowed: [${allowedRoles.join(', ')}]`,
@@ -130,7 +103,6 @@ function requireBranchRole(allowedRoles = []) {
       // Attach branch context to request
       req.branchId = branchId;
       req.currentRole = userRole;
-      req.canonicalRole = normalizeRole(userRole);
       next();
     } catch (err) {
       next(err);
@@ -141,5 +113,4 @@ function requireBranchRole(allowedRoles = []) {
 module.exports = {
   authenticateToken,
   requireBranchRole,
-  normalizeRole,
 };

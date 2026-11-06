@@ -62,7 +62,7 @@ CREATE TABLE IF NOT EXISTS user_branch_roles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     branch_id UUID NOT NULL REFERENCES branches(id) ON DELETE CASCADE,
-    role VARCHAR(20) NOT NULL CHECK (role IN ('staff', 'admin', 'billing')),
+    role VARCHAR(20) NOT NULL CHECK (role IN ('staff', 'staffAdmin', 'owner', 'billingAdmin')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uq_user_branch_role UNIQUE (user_id, branch_id, role)

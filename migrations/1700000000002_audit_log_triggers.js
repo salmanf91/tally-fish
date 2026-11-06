@@ -140,3 +140,4 @@ exports.down = (pgm) => {
     DROP FUNCTION IF EXISTS trg_audit_entries_and_rates CASCADE;
   `);
 };
+
