@@ -9,20 +9,19 @@ router.post('/login', authController.login);
 // Protected routes
 router.get('/me', authenticateToken, authController.getCurrentUser);
 
-// Admin user administration
+// User administration: Accessible to owner, billingAdmin, and staffAdmin
 router.post(
   '/users',
   authenticateToken,
-  requireBranchRole(['admin', 'staffAdmin', 'owner']),
+  requireBranchRole(['owner', 'billingAdmin', 'staffAdmin']),
   authController.createUser
 );
 
 router.post(
   '/reset-pin',
   authenticateToken,
-  requireBranchRole(['admin', 'staffAdmin', 'owner']),
+  requireBranchRole(['owner', 'billingAdmin', 'staffAdmin']),
   authController.resetUserPin
 );
 
 module.exports = router;
-

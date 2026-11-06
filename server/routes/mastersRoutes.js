@@ -16,24 +16,24 @@ router.get(
   mastersController.listParties
 );
 
-// Quick-create by Staff on the fly OR curated creation by Admin
+// Quick-create by Staff on the fly OR curated creation by office
 router.post(
   '/parties',
-  requireBranchRole(['staff', 'admin', 'staffAdmin', 'owner', 'billing', 'billingAdmin']),
+  requireBranchRole(['staff', 'billingAdmin', 'staffAdmin', 'owner']),
   mastersController.createParty
 );
 
-// Curation/updating by Admin or Billing
+// Curation/updating by office
 router.put(
   '/parties/:id',
-  requireBranchRole(['admin', 'staffAdmin', 'owner', 'billing', 'billingAdmin']),
+  requireBranchRole(['owner', 'billingAdmin', 'staffAdmin']),
   mastersController.updateParty
 );
 
-// Full merging by Admin
+// Full merging (accessible to owner, billingAdmin, and staffAdmin)
 router.post(
   '/parties/merge',
-  requireBranchRole(['admin', 'staffAdmin', 'owner']),
+  requireBranchRole(['owner', 'billingAdmin', 'staffAdmin']),
   mastersController.mergeParties
 );
 
@@ -47,24 +47,24 @@ router.get(
   mastersController.listVehicles
 );
 
-// Quick-create by Staff on the fly OR curated creation by Admin
+// Quick-create by Staff on the fly OR curated creation by office
 router.post(
   '/vehicles',
-  requireBranchRole(['staff', 'admin', 'staffAdmin', 'owner', 'billing', 'billingAdmin']),
+  requireBranchRole(['staff', 'billingAdmin', 'staffAdmin', 'owner']),
   mastersController.createVehicle
 );
 
-// Curation/updating by Admin or Billing
+// Curation/updating by office
 router.put(
   '/vehicles/:id',
-  requireBranchRole(['admin', 'staffAdmin', 'owner', 'billing', 'billingAdmin']),
+  requireBranchRole(['owner', 'billingAdmin', 'staffAdmin']),
   mastersController.updateVehicle
 );
 
-// Full merging by Admin
+// Full merging
 router.post(
   '/vehicles/merge',
-  requireBranchRole(['admin', 'staffAdmin', 'owner']),
+  requireBranchRole(['owner', 'billingAdmin', 'staffAdmin']),
   mastersController.mergeVehicles
 );
 
@@ -78,26 +78,25 @@ router.get(
   mastersController.listFishTypes
 );
 
-// Quick-create by Staff on the fly OR curated creation by Admin
+// Quick-create by Staff on the fly OR curated creation by office
 router.post(
   '/fish-types',
-  requireBranchRole(['staff', 'admin', 'staffAdmin', 'owner', 'billing', 'billingAdmin']),
+  requireBranchRole(['staff', 'billingAdmin', 'staffAdmin', 'owner']),
   mastersController.createFishType
 );
 
-// Curation/updating by Admin or Billing
+// Curation/updating by office
 router.put(
   '/fish-types/:id',
-  requireBranchRole(['admin', 'staffAdmin', 'owner', 'billing', 'billingAdmin']),
+  requireBranchRole(['owner', 'billingAdmin', 'staffAdmin']),
   mastersController.updateFishType
 );
 
-// Full merging by Admin
+// Full merging
 router.post(
   '/fish-types/merge',
-  requireBranchRole(['admin', 'staffAdmin', 'owner']),
+  requireBranchRole(['owner', 'billingAdmin', 'staffAdmin']),
   mastersController.mergeFishTypes
 );
 
 module.exports = router;
-

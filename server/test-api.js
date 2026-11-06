@@ -72,9 +72,9 @@ async function runTests() {
     const badLogin = await request('POST', '/auth/login', { username: 'admin', pin: '9999' });
     assert(badLogin.status === 401 && badLogin.body.remainingAttempts === 4, 'Invalid PIN rejection & failed attempts increment');
 
-    // Valid Admin Login
+    // Valid Owner/Admin Login
     const adminLogin = await request('POST', '/auth/login', { username: 'admin', pin: '1234' });
-    assert(adminLogin.status === 200 && adminLogin.body.token, 'Admin PIN Authentication & JWT generation');
+    assert(adminLogin.status === 200 && adminLogin.body.token, 'Owner PIN Authentication & JWT generation');
     const adminToken = adminLogin.body.token;
 
     // Valid Staff Login
@@ -83,6 +83,11 @@ async function runTests() {
     const staffToken = staffLogin.body.token;
     const branchId = staffLogin.body.branches[0].branch_id;
     assert(!!branchId, `Resolved active Branch ID for staff & admin: ${branchId}`);
+
+    // Valid BillingAdmin Login
+    const billingLogin = await request('POST', '/auth/login', { username: 'billing_user', pin: '2222' });
+    assert(billingLogin.status === 200 && billingLogin.body.token, 'billingAdmin PIN Authentication & JWT generation');
+    const billingToken = billingLogin.body.token;
 
     // 3. Middleware & X-Branch-ID Enforcement
     console.log('\n--- Test Group: requireBranchRole & X-Branch-ID Middleware ---');
@@ -147,18 +152,14 @@ async function runTests() {
       'X-Branch-ID': branchId,
     });
 
-    if (entryCreateRes.status !== 201) {
-      console.error('DEBUG entryCreateRes error:', JSON.stringify(entryCreateRes.body, null, 2));
-    }
-
     assert(entryCreateRes.status === 201, 'Entry creation success');
     const entry = entryCreateRes.body.data;
     assert(Number(entry.net_kg) === 1000.00, `Net Weight computation: ${entry.net_kg} == 1000.00 (1500 - 400 - 100)`);
     assert(entry.status === 'RATE_PENDING', 'Initial entry status is RATE_PENDING');
     assert(entry.daily_sl_no >= 1, `Isolated daily serial allocated: #${entry.daily_sl_no}`);
 
-    // 6. Rate Fixing & Server-Side Locking
-    console.log('\n--- Test Group: Rate Fixing & Locking Engine ---');
+    // 6. Rate Fixing & Server-Side Locking by billingAdmin
+    console.log('\n--- Test Group: Rate Fixing & Locking by billingAdmin ---');
     // Staff attempt to set rates -> Must be FORBIDDEN
     const staffRateAttempt = await request(
       'POST',
@@ -168,7 +169,7 @@ async function runTests() {
     );
     assert(staffRateAttempt.status === 403, 'Staff is strictly FORBIDDEN from setting rates');
 
-    // Admin sets rates:
+    // billingAdmin sets rates directly with single office login:
     // Box mix:
     // 50 bx CHAMBAN @ 50/kg
     // 20 bx SARDINE @ 30/kg
@@ -180,13 +181,13 @@ async function runTests() {
       ],
     };
 
-    const adminRateRes = await request('POST', `/entries/${entry.id}/rates`, ratePayload, {
-      Authorization: `Bearer ${adminToken}`,
+    const billingRateRes = await request('POST', `/entries/${entry.id}/rates`, ratePayload, {
+      Authorization: `Bearer ${billingToken}`,
       'X-Branch-ID': branchId,
     });
 
-    assert(adminRateRes.status === 200, 'Admin successfully set purchase rates');
-    const rateData = adminRateRes.body.data;
+    assert(billingRateRes.status === 200, 'billingAdmin successfully set purchase rates');
+    const rateData = billingRateRes.body.data;
     assert(rateData.status === 'LOCKED', 'Entry status updated to LOCKED');
     assert(rateData.average_rate === 44.29, `Weighted Average Rate calculated: ${rateData.average_rate} == 44.29`);
     assert(rateData.total_amount === 44290.00, `Total Purchase Amount: ${rateData.total_amount} == 44290.00 (1000 kg * 44.29)`);
@@ -201,14 +202,14 @@ async function runTests() {
     );
     assert(staffEditLockedEntry.status === 403, 'Server-side rate lock strictly blocks Staff edits once locked');
 
-    // 8. Masters Merging by Admin
-    console.log('\n--- Test Group: Master Merging by Admin ---');
+    // 8. Masters Merging by billingAdmin (Single Office Login capability)
+    console.log('\n--- Test Group: Master Merging by billingAdmin ---');
     // Create duplicate party
     const dupPartyRes = await request(
       'POST',
       '/masters/parties',
       { name: `Duplicate Vendor ${Date.now()}` },
-      { Authorization: `Bearer ${adminToken}`, 'X-Branch-ID': branchId }
+      { Authorization: `Bearer ${billingToken}`, 'X-Branch-ID': branchId }
     );
     const dupPartyId = dupPartyRes.body.data.id;
 
@@ -216,11 +217,24 @@ async function runTests() {
       'POST',
       '/masters/parties/merge',
       { sourcePartyId: dupPartyId, targetPartyId: partyId },
-      { Authorization: `Bearer ${adminToken}`, 'X-Branch-ID': branchId }
+      { Authorization: `Bearer ${billingToken}`, 'X-Branch-ID': branchId }
     );
-    assert(mergeRes.status === 200, 'Admin duplicate party merging success');
+    assert(mergeRes.status === 200, 'billingAdmin successfully merged duplicate party');
 
-    // 9. Automated Audit Trail Verification
+    // 9. PIN Reset by billingAdmin (Single Office Login capability)
+    console.log('\n--- Test Group: Operator PIN Reset by billingAdmin ---');
+    const staffUserRes = await db.query("SELECT id FROM users WHERE username = 'staff_ullal'");
+    const staffUserId = staffUserRes.rows[0].id;
+
+    const resetPinRes = await request(
+      'POST',
+      '/auth/reset-pin',
+      { userId: staffUserId, newPin: '1111' },
+      { Authorization: `Bearer ${billingToken}`, 'X-Branch-ID': branchId }
+    );
+    assert(resetPinRes.status === 200, 'billingAdmin successfully reset operator PIN and unlocked account');
+
+    // 10. Automated Audit Trail Verification
     console.log('\n--- Test Group: Automated Audit Log Verification ---');
     const auditRes = await db.query(
       `SELECT action, entity_type, diffs FROM audit_logs WHERE branch_id = $1 ORDER BY created_at DESC LIMIT 5`,

@@ -37,3 +37,4 @@ exports.down = (pgm) => {
     CHECK (role IN ('staff', 'admin', 'billing'));
   `);
 };
+
