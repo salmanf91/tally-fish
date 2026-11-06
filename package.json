@@ -2,12 +2,12 @@
   "name": "tally-fish",
   "version": "1.0.0",
   "description": "Daily Statement Application - Multi-Branch, Offline-Capable PWA with Background Web Push",
-  "main": "server/index.js",
+  "main": "backend/index.js",
   "scripts": {
-    "start": "node server/index.js",
-    "dev": "node --watch server/index.js",
-    "seed": "node server/db/seed.js",
-    "test:api": "node server/test-api.js",
+    "start": "node backend/index.js",
+    "dev": "node --watch backend/index.js",
+    "seed": "node backend/db/seed.js",
+    "test:api": "node backend/test-api.js",
     "migrate:up": "node-pg-migrate --envPath .env up",
     "migrate:down": "node-pg-migrate --envPath .env down",
     "migrate:create": "node-pg-migrate create"
