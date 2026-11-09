@@ -76,7 +76,7 @@ export default function TodayView({ onNewEntry, onEditEntry, onViewLockedEntry }
   const queuedSyncList = offlineList.filter(
     (e) => e.status === 'QUEUED_SYNC' || e.status === 'OFFLINE_PENDING'
   );
-  const holdReviewOfflineList = offlineList.filter((e) => e.status === 'HOLD_REVIEW');
+  const holdReviewList = offlineList.filter((e) => e.status === 'HOLD_REVIEW');
 
   // Format offline entries matching selected date
   const offlineForDay = offlineList
