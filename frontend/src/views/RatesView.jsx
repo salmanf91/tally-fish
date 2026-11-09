@@ -57,23 +57,71 @@ export default function RatesView({ initialEntryId = null, onDone }) {
     return entries.find((e) => e.id === queue[0]) || null;
   }, [queue, entries]);
 
-  // Extract fish lines / parts for current entry
-  const parts = useMemo(() => {
+  // Group fish lines into box lots for current entry
+  const groupedLots = useMemo(() => {
     if (!currentEntry) return [];
     if (Array.isArray(currentEntry.boxes) && currentEntry.boxes.length > 0) {
-      return currentEntry.boxes.map((b, idx) => ({
-        key: b.id || String(idx),
-        box_id: b.id,
-        fish: b.fish_name,
-        box_count: b.box_count,
-        pct: parseFloat(b.mix_percentage) || 100,
-        lastRate: LAST_KNOWN_RATES[b.fish_name] || 35,
-      }));
+      const groups = [];
+
+      currentEntry.boxes.forEach((b, idx) => {
+        const key = b.id || String(idx);
+        const partObj = {
+          key,
+          box_id: b.id,
+          fish: b.fish_name,
+          box_count: b.box_count,
+          pct: parseFloat(b.mix_percentage) || 100,
+          fish_count: b.fish_count || null,
+          lastRate: LAST_KNOWN_RATES[b.fish_name] || 35,
+        };
+
+        const gId = b.box_group_id;
+
+        if (gId) {
+          let found = groups.find((g) => g.groupId === gId);
+          if (!found) {
+            found = {
+              groupId: gId,
+              box_count: b.box_count,
+              parts: [],
+            };
+            groups.push(found);
+          }
+          found.parts.push(partObj);
+        } else {
+          // If no box_group_id, group adjacent boxes if they share box_count and mix sums <= 100
+          const pct = parseFloat(b.mix_percentage) || 100;
+          const lastGroup = groups[groups.length - 1];
+          const lastSumPct = lastGroup ? lastGroup.parts.reduce((s, p) => s + p.pct, 0) : 100;
+
+          if (lastGroup && lastGroup.box_count === b.box_count && lastSumPct + pct <= 100.01) {
+            lastGroup.parts.push(partObj);
+          } else {
+            groups.push({
+              groupId: `lot_${idx}`,
+              box_count: b.box_count,
+              parts: [partObj],
+            });
+          }
+        }
+      });
+
+      return groups;
     }
+
     return [
-      { key: '0', fish: 'CHAMBAN', box_count: 10, pct: 100, lastRate: 36 },
+      {
+        groupId: 'default',
+        box_count: 10,
+        parts: [{ key: '0', fish: 'CHAMBAN', box_count: 10, pct: 100, lastRate: 36 }],
+      },
     ];
   }, [currentEntry]);
+
+  // Flattened parts for inputs, keypad, and mutation submission
+  const parts = useMemo(() => {
+    return groupedLots.flatMap((g) => g.parts);
+  }, [groupedLots]);
 
   // Initialize rates inputs when current entry changes
   useEffect(() => {
@@ -260,58 +308,115 @@ export default function RatesView({ initialEntryId = null, onDone }) {
         </div>
       </div>
 
-      {/* Fish Parts / Species Rate Rows */}
-      <div className="space-y-2">
-        {parts.map((p) => {
-          const isFocused = activePartKey === p.key;
-          const currentVal = ratesMap[p.key];
+      {/* Grouped Box Lots / Fish Rate Cards */}
+      <div className="space-y-3">
+        {groupedLots.map((lot, lotIdx) => {
+          const isMixedLot = lot.parts.length > 1 || (lot.parts[0]?.pct > 0 && lot.parts[0]?.pct < 100);
+          const totalLotPct = lot.parts.reduce((sum, p) => sum + (p.pct || 0), 0);
+
+          let lotAvgRate = null;
+          if (isMixedLot) {
+            let sum = 0;
+            let totalPct = 0;
+            lot.parts.forEach((p) => {
+              const r = parseFloat(ratesMap[p.key]) || 0;
+              sum += r * p.pct;
+              totalPct += p.pct;
+            });
+            lotAvgRate = totalPct > 0 ? (sum / totalPct).toFixed(2) : null;
+          }
 
           return (
             <div
-              key={p.key}
-              onClick={() => setActivePartKey(p.key)}
-              className={`p-3.5 rounded-2xl border transition-all cursor-pointer select-none flex items-center justify-between ${
-                isFocused
-                  ? 'bg-amber-50/60 border-amber-400 ring-2 ring-amber-100 shadow-sm'
-                  : 'bg-white border-slate-200 hover:border-slate-300'
-              }`}
+              key={lot.groupId || lotIdx}
+              className="light-card rounded-2xl p-4 border border-slate-200 shadow-sm space-y-3 bg-white"
             >
-              <div>
-                <h4 className="font-bold text-sm text-slate-900">{p.fish}</h4>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  {p.box_count} boxes {p.pct < 100 ? `· ${p.pct}% mix` : ''}{' '}
-                  {p.lastRate ? `· last ₹${p.lastRate}` : ''}
-                </p>
+              {/* Lot Container Header */}
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-900 border border-amber-200 text-xs font-mono font-black">
+                    {lot.box_count} {lot.box_count === 1 ? 'Box' : 'Boxes'}
+                  </span>
+                  <span className="text-xs font-bold text-slate-800">
+                    {isMixedLot ? 'Mixed Box Lot' : 'Single Species'}
+                  </span>
+                </div>
+                {isMixedLot && (
+                  <span className="text-[11px] font-semibold text-slate-500">
+                    {lot.parts.length} species · {Math.round(totalLotPct)}% filled
+                  </span>
+                )}
               </div>
 
-              <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                <span className="text-base font-bold text-slate-500 font-mono">₹</span>
-                <input
-                  type="number"
-                  step="any"
-                  min="0"
-                  placeholder="0"
-                  value={currentVal || ''}
-                  onFocus={() => setActivePartKey(p.key)}
-                  onChange={(e) => {
-                    setActivePartKey(p.key);
-                    setRatesMap((prev) => ({ ...prev, [p.key]: e.target.value }));
-                  }}
-                  className="w-24 text-right text-lg font-mono font-black text-slate-900 bg-white border border-slate-300 rounded-xl px-2.5 py-1 focus:outline-none focus:ring-2 focus:ring-amber-500"
-                />
-                <span className="text-xs text-slate-400 font-semibold">/kg</span>
+              {/* Individual Fish Rows with Separate Rate Textboxes */}
+              <div className="space-y-2">
+                {lot.parts.map((p) => {
+                  const isFocused = activePartKey === p.key;
+                  const currentVal = ratesMap[p.key];
+
+                  return (
+                    <div
+                      key={p.key}
+                      onClick={() => setActivePartKey(p.key)}
+                      className={`p-3 rounded-xl border transition-all cursor-pointer select-none flex items-center justify-between ${
+                        isFocused
+                          ? 'bg-amber-50/70 border-amber-400 ring-2 ring-amber-100 shadow-sm'
+                          : 'bg-slate-50/60 border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-bold text-sm text-slate-900">{p.fish}</h4>
+                          {isMixedLot && (
+                            <span className="text-xs font-mono font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                              {p.pct}%
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          {p.fish_count ? `${p.fish_count} count · ` : ''}
+                          {p.lastRate ? `last ₹${p.lastRate}/kg` : ''}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                        <span className="text-base font-bold text-slate-500 font-mono">₹</span>
+                        <input
+                          type="number"
+                          step="any"
+                          min="0"
+                          placeholder="0"
+                          value={currentVal || ''}
+                          onFocus={() => setActivePartKey(p.key)}
+                          onChange={(e) => {
+                            setActivePartKey(p.key);
+                            setRatesMap((prev) => ({ ...prev, [p.key]: e.target.value }));
+                          }}
+                          className={`w-24 text-right text-base font-mono font-black text-slate-900 bg-white border rounded-xl px-2.5 py-1 focus:outline-none ${
+                            isFocused
+                              ? 'border-amber-500 ring-2 ring-amber-400'
+                              : 'border-slate-300'
+                          }`}
+                        />
+                        <span className="text-xs text-slate-400 font-semibold">/kg</span>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
+
+              {/* Lot Weighted Average Banner (Mixed Lots only) */}
+              {isMixedLot && (
+                <div className="pt-2 border-t border-dashed border-slate-200 flex items-center justify-between text-xs">
+                  <span className="text-slate-600 font-medium">Weighted avg rate for this mixed box:</span>
+                  <span className="font-mono font-bold text-blue-800 text-sm">
+                    {lotAvgRate && Number(lotAvgRate) > 0 ? `₹${lotAvgRate} / kg` : '—'}
+                  </span>
+                </div>
+              )}
             </div>
           );
         })}
-
-        {/* Mixed Box Lot Weighted Average Banner (if mixed lot) */}
-        {isMixedLot && mixAverageRate && (
-          <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-between text-xs">
-            <span className="text-blue-900 font-semibold">Average rate for mixed box:</span>
-            <strong className="text-blue-900 font-mono font-bold text-sm">₹{mixAverageRate} / kg</strong>
-          </div>
-        )}
       </div>
 
       {/* On-Screen Keypad for Rate (screenshots 3, 4, 5 removed) */}
