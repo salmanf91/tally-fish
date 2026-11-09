@@ -164,9 +164,25 @@ async function createEntry(req, res, next) {
             fId = fishLookup.rows[0].id;
             fName = fishLookup.rows[0].name;
           } else {
-            const err = new Error(`Fish species "${fName}" does not exist in master catalog. Billing staff must add this species first.`);
-            err.status = 400;
-            throw err;
+            // Auto-register fish species entered via "Other..." so weighbridge entry is seamless
+            const newFish = await client.query(
+              `INSERT INTO fish_types (id, branch_id, name, is_active)
+               VALUES (gen_random_uuid(), NULL, $1, true)
+               ON CONFLICT DO NOTHING
+               RETURNING id, name`,
+              [fName]
+            );
+            if (newFish.rows.length > 0) {
+              fId = newFish.rows[0].id;
+              fName = newFish.rows[0].name;
+            } else {
+              const retryLookup = await client.query(
+                'SELECT id, name FROM fish_types WHERE LOWER(name) = LOWER($1) LIMIT 1',
+                [fName]
+              );
+              fId = retryLookup.rows[0].id;
+              fName = retryLookup.rows[0].name;
+            }
           }
         } else {
           const err = new Error('Fish specification requires fish_type_id or fish_name');
