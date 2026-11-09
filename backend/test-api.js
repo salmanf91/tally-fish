@@ -51,6 +51,7 @@ async function runTests() {
 
   server = app.listen(PORT);
   let failed = 0;
+  const createdTestEntryIds = [];
 
   function assert(condition, message) {
     if (condition) {
@@ -154,6 +155,7 @@ async function runTests() {
 
     assert(entryCreateRes.status === 201, 'Entry creation success');
     const entry = entryCreateRes.body.data;
+    if (entry?.id) createdTestEntryIds.push(entry.id);
     assert(Number(entry.net_kg) === 1000.00, `Net Weight computation: ${entry.net_kg} == 1000.00 (1500 - 400 - 100)`);
     assert(entry.status === 'RATE_PENDING', 'Initial entry status is RATE_PENDING');
     assert(entry.daily_sl_no >= 1, `Isolated daily serial allocated: #${entry.daily_sl_no}`);
@@ -247,6 +249,7 @@ async function runTests() {
     );
     assert(syncRes.status === 200, 'POST /api/entries/sync responds 200');
     assert(syncRes.body.synced.length === 1, 'Offline new entry synced successfully');
+    if (syncRes.body.synced[0]?.id) createdTestEntryIds.push(syncRes.body.synced[0].id);
     assert(syncRes.body.synced[0].tempId === 'offline_slip_1', 'Synced result includes original tempId');
     assert(syncRes.body.conflicts.length === 1, 'Server-lock conflict correctly detected');
     assert(syncRes.body.conflicts[0].status === 'HOLD_REVIEW', 'Conflicting entry routed to HOLD_REVIEW for Admin Review');
@@ -387,6 +390,7 @@ async function runTests() {
       { Authorization: `Bearer ${staffToken}`, 'X-Branch-ID': branchId }
     );
     assert(eventEntryRes.status === 201, 'Created entry to verify entry:created event emission');
+    if (eventEntryRes.body.data?.id) createdTestEntryIds.push(eventEntryRes.body.data.id);
 
     // Give event loop tick
     await new Promise((r) => setTimeout(r, 100));
@@ -461,10 +465,11 @@ async function runTests() {
   } finally {
     console.log('\n🧹 Cleaning up test artifacts to guarantee pristine production database state...');
     try {
-      const realEntryId = '82d6cd23-4d13-46d4-9e16-d96143d9fc16';
-      await db.query('DELETE FROM entry_rates WHERE entry_id != $1', [realEntryId]);
-      await db.query('DELETE FROM entry_boxes WHERE entry_id != $1', [realEntryId]);
-      await db.query('DELETE FROM entries WHERE id != $1', [realEntryId]);
+      if (createdTestEntryIds.length > 0) {
+        await db.query('DELETE FROM entry_rates WHERE entry_id = ANY($1)', [createdTestEntryIds]);
+        await db.query('DELETE FROM entry_boxes WHERE entry_id = ANY($1)', [createdTestEntryIds]);
+        await db.query('DELETE FROM entries WHERE id = ANY($1)', [createdTestEntryIds]);
+      }
       await db.query(`
         DELETE FROM vehicles 
         WHERE vehicle_no ILIKE '%TEST%' 

@@ -2,14 +2,26 @@ const db = require('../db');
 
 async function cleanup() {
   console.log('--- Cleaning up database test records ---');
-  // 1. Delete test entries (keep real manual entry 82d6cd23-4d13-46d4-9e16-d96143d9fc16)
-  const realEntryId = '82d6cd23-4d13-46d4-9e16-d96143d9fc16';
-  const delRates = await db.query('DELETE FROM entry_rates WHERE entry_id != $1', [realEntryId]);
-  console.log('Deleted test entry_rates:', delRates.rowCount);
-  const delBoxes = await db.query('DELETE FROM entry_boxes WHERE entry_id != $1', [realEntryId]);
-  console.log('Deleted test entry_boxes:', delBoxes.rowCount);
-  const delEntries = await db.query('DELETE FROM entries WHERE id != $1', [realEntryId]);
-  console.log('Deleted test entries:', delEntries.rowCount);
+  // 1. Delete test entries (identified by test party / test vehicle patterns)
+  const delTestEntries = await db.query(`
+    SELECT id FROM entries 
+    WHERE party_name ILIKE '%Quick Vendor%' 
+       OR party_name ILIKE '%Duplicate Vendor%' 
+       OR party_name ILIKE '%Push Event Vendor%' 
+       OR party_name ILIKE '%Offline Sync%' 
+       OR party_name ILIKE '%Test%'
+       OR vehicle_no ILIKE '%EV-9999%'
+       OR vehicle_no ILIKE '%EF 9999%'
+  `);
+  const testIds = delTestEntries.rows.map(r => r.id);
+  if (testIds.length > 0) {
+    const delRates = await db.query('DELETE FROM entry_rates WHERE entry_id = ANY($1)', [testIds]);
+    console.log('Deleted test entry_rates:', delRates.rowCount);
+    const delBoxes = await db.query('DELETE FROM entry_boxes WHERE entry_id = ANY($1)', [testIds]);
+    console.log('Deleted test entry_boxes:', delBoxes.rowCount);
+    const delEntries = await db.query('DELETE FROM entries WHERE id = ANY($1)', [testIds]);
+    console.log('Deleted test entries:', delEntries.rowCount);
+  }
 
   // 2. Delete test vehicles
   const delVehicles = await db.query(`
