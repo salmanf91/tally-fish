@@ -3,7 +3,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { BadgeDollarSign, Lock, Check, AlertCircle, ArrowRight, SkipForward } from 'lucide-react';
 import { useBranch } from '../context/BranchContext';
 import { api } from '../services/api';
-import NumericKeypad from '../components/common/NumericKeypad';
 
 const LAST_KNOWN_RATES = {
   CHAMBAN: 36,
@@ -156,20 +155,6 @@ export default function RatesView({ initialEntryId = null, onDone }) {
       setErrorMessage(err.message || 'Failed to fix rates');
     },
   });
-
-  const handleKeypadChange = (newVal) => {
-    setRatesMap((prev) => ({
-      ...prev,
-      [activePartKey]: newVal,
-    }));
-  };
-
-  const handleApplyLastRate = (rate) => {
-    setRatesMap((prev) => ({
-      ...prev,
-      [activePartKey]: String(rate),
-    }));
-  };
 
   const handleSkip = () => {
     setQueue((prev) => {
@@ -417,18 +402,6 @@ export default function RatesView({ initialEntryId = null, onDone }) {
             </div>
           );
         })}
-      </div>
-
-      {/* On-Screen Keypad for Rate (screenshots 3, 4, 5 removed) */}
-      <div className="light-card p-3 rounded-2xl">
-        <NumericKeypad
-          value={ratesMap[activePartKey] || ''}
-          onChange={handleKeypadChange}
-          onDone={handleSaveAndNext}
-          onClear={() => handleKeypadChange('')}
-          allowDecimal={true}
-          maxDecimals={2}
-        />
       </div>
 
       {/* Bottom Action Row: Skip & Save */}
