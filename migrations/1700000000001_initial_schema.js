@@ -174,11 +174,16 @@ exports.up = (pgm) => {
     },
   });
 
-  // Unique name per branch (NULLS NOT DISTINCT ensures single global entry per name)
+  // Unique name per branch (standard UNIQUE compatible with PG 14+, plus partial index for global entries)
   pgm.sql(`
     ALTER TABLE parties
     ADD CONSTRAINT uq_parties_branch_name
-    UNIQUE NULLS NOT DISTINCT (branch_id, name);
+    UNIQUE (branch_id, name);
+  `);
+  pgm.sql(`
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_parties_global_name
+    ON parties (name)
+    WHERE branch_id IS NULL;
   `);
   pgm.createIndex('parties', 'branch_id');
   pgm.createIndex('parties', 'phone');
@@ -224,11 +229,16 @@ exports.up = (pgm) => {
     },
   });
 
-  // Unique vehicle_no per branch (NULLS NOT DISTINCT)
+  // Unique vehicle_no per branch (standard UNIQUE compatible with PG 14+, plus partial index for global entries)
   pgm.sql(`
     ALTER TABLE vehicles
     ADD CONSTRAINT uq_vehicles_branch_no
-    UNIQUE NULLS NOT DISTINCT (branch_id, vehicle_no);
+    UNIQUE (branch_id, vehicle_no);
+  `);
+  pgm.sql(`
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_vehicles_global_no
+    ON vehicles (vehicle_no)
+    WHERE branch_id IS NULL;
   `);
   pgm.createIndex('vehicles', 'branch_id');
   pgm.createIndex('vehicles', 'party_id');
@@ -269,11 +279,16 @@ exports.up = (pgm) => {
     },
   });
 
-  // Unique fish name per branch (NULLS NOT DISTINCT)
+  // Unique fish name per branch (standard UNIQUE compatible with PG 14+, plus partial index for global entries)
   pgm.sql(`
     ALTER TABLE fish_types
     ADD CONSTRAINT uq_fish_types_branch_name
-    UNIQUE NULLS NOT DISTINCT (branch_id, name);
+    UNIQUE (branch_id, name);
+  `);
+  pgm.sql(`
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_fish_types_global_name
+    ON fish_types (name)
+    WHERE branch_id IS NULL;
   `);
   pgm.createIndex('fish_types', 'branch_id');
 

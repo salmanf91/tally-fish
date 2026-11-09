@@ -424,11 +424,10 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
                   key={pName}
                   type="button"
                   onClick={() => setPartySearch(pName)}
-                  className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition-all ${
-                    isSelected
+                  className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition-all ${isSelected
                       ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
                       : 'bg-white text-slate-700 border-slate-300 hover:border-slate-400'
-                  }`}
+                    }`}
                 >
                   {pName}
                 </button>
@@ -666,13 +665,13 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
               {!partySearch.trim()
                 ? 'Please select or enter a party / vendor.'
                 : lines.some((l) => !(parseInt(l.boxes, 10) > 0))
-                ? 'Please enter the number of boxes.'
-                : lines.some((l) => {
+                  ? 'Please enter the number of boxes.'
+                  : lines.some((l) => {
                     const total = l.parts.reduce((s, p) => s + (parseFloat(p.pct) || 0), 0);
                     return total > 100;
                   })
-                ? 'Box mix percentage cannot exceed 100%.'
-                : 'Every box mix must total exactly 100% before proceeding.'}
+                    ? 'Box mix percentage cannot exceed 100%.'
+                    : 'Every box mix must total exactly 100% before proceeding.'}
             </span>
           </div>
         )}
@@ -768,11 +767,10 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
               key={v}
               type="button"
               onClick={() => setVehicleNo(v)}
-              className={`text-[11px] font-mono font-bold px-2.5 py-1 rounded-lg border whitespace-nowrap ${
-                vehicleNo === v
-                  ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
-                  : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
-              }`}
+              className={`text-[11px] font-mono font-bold px-2.5 py-1 rounded-lg border whitespace-nowrap ${vehicleNo === v
+                ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
+                : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                }`}
             >
               {v}
             </button>
@@ -858,7 +856,7 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
             : (emptyVal >= loadedVal && loadedVal > 0) || (loadedVal > 0 && emptyVal > 0 && netWeight < 0)
             ? 'bg-rose-50 border-rose-300 text-rose-900'
             : 'bg-slate-100 border-slate-200 text-slate-700'
-        }`}
+          }`}
       >
         <div className="flex items-center justify-between">
           <div>
@@ -911,8 +909,8 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
             ? 'Saving Changes...'
             : 'Sending to Admin...'
           : editEntry
-          ? 'Save Changes →'
-          : 'Send to admin for rate →'}
+            ? 'Save Changes →'
+            : 'Send to admin for rate →'}
       </button>
     </div>
   );
