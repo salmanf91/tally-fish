@@ -94,10 +94,14 @@ async function createEntry(req, res, next) {
           resolvedPartyId = partyLookup.rows[0].id;
           resolvedPartyName = partyLookup.rows[0].name;
         } else {
-          throw new Error(`Party "${resolvedPartyName}" not found in masters. Please select a registered vendor or create it via Master Data.`);
+          const err = new Error(`Party "${resolvedPartyName}" does not exist in master records. Billing staff must add this vendor first.`);
+          err.status = 400;
+          throw err;
         }
       } else {
-        throw new Error('Either party_id or party_name must be provided');
+        const err = new Error('Either party_id or party_name must be provided');
+        err.status = 400;
+        throw err;
       }
 
       // 2. Resolve or validate Vehicle
@@ -110,7 +114,9 @@ async function createEntry(req, res, next) {
           [resolvedVehicleId, branchId]
         );
         if (vehicleCheck.rows.length === 0) {
-          throw new Error(`Vehicle ID "${resolvedVehicleId}" not found or not accessible to this branch`);
+          const err = new Error(`Vehicle ID "${resolvedVehicleId}" not found or not accessible to this branch`);
+          err.status = 400;
+          throw err;
         }
         resolvedVehicleNo = vehicleCheck.rows[0].vehicle_no;
       } else if (resolvedVehicleNo) {
@@ -122,10 +128,14 @@ async function createEntry(req, res, next) {
           resolvedVehicleId = vehicleLookup.rows[0].id;
           resolvedVehicleNo = vehicleLookup.rows[0].vehicle_no;
         } else {
-          throw new Error(`Vehicle "${resolvedVehicleNo}" not found in masters. Please register the vehicle via Master Data.`);
+          const err = new Error(`Vehicle "${resolvedVehicleNo}" does not exist in master records. Billing staff must register this vehicle first.`);
+          err.status = 400;
+          throw err;
         }
       } else {
-        throw new Error('Either vehicle_id or vehicle_no must be provided');
+        const err = new Error('Either vehicle_id or vehicle_no must be provided');
+        err.status = 400;
+        throw err;
       }
 
       // 3. Resolve and validate Fish Types for all boxes
@@ -140,7 +150,9 @@ async function createEntry(req, res, next) {
             [fId, branchId]
           );
           if (fishCheck.rows.length === 0) {
-            throw new Error(`Fish Type ID "${fId}" not found in catalog`);
+            const err = new Error(`Fish Type ID "${fId}" not found in catalog`);
+            err.status = 400;
+            throw err;
           }
           fName = fishCheck.rows[0].name;
         } else if (fName) {
@@ -152,10 +164,14 @@ async function createEntry(req, res, next) {
             fId = fishLookup.rows[0].id;
             fName = fishLookup.rows[0].name;
           } else {
-            throw new Error(`Fish species "${fName}" not found in catalog. Please select a registered species or add it via Master Data.`);
+            const err = new Error(`Fish species "${fName}" does not exist in master catalog. Billing staff must add this species first.`);
+            err.status = 400;
+            throw err;
           }
         } else {
-          throw new Error('Fish specification requires fish_type_id or fish_name');
+          const err = new Error('Fish specification requires fish_type_id or fish_name');
+          err.status = 400;
+          throw err;
         }
 
         validatedBoxes.push({

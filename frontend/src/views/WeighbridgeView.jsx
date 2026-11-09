@@ -17,16 +17,10 @@ import {
   useParties,
   useVehicles,
   useFishTypes,
-  useCreateQuickParty,
-  useCreateQuickVehicle,
-  useCreateQuickFishType,
 } from '../hooks/useMasters';
 import { api } from '../services/api';
 import { saveOfflineEntry } from '../services/db';
 import { registerBackgroundSync } from '../services/syncManager';
-
-const DEFAULT_FISH_SPECIES = ['CHAMBAN', 'SARDINE', 'KODANDE', 'MURU HEAD', 'GOLAI', 'THONDE', 'AILE', 'DISCO', 'MIX', 'PAMBOL', 'THAKATTE'];
-const DEFAULT_VEHICLES = ['KL 59Z 5206', 'KA 19D 7628', 'KA 19AE 6136', 'KA 09C 8942'];
 
 const getLocalDateString = (d = new Date()) => {
   const year = d.getFullYear();
@@ -39,28 +33,19 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
   const { activeBranchId, activeBranch } = useBranch();
   const queryClient = useQueryClient();
 
-  // Master Data hooks (dynamic from PostgreSQL & cached in IndexedDB)
+  // Master Data hooks (dynamic strictly from PostgreSQL database)
   const { data: partiesList = [], refetch: refetchParties } = useParties(activeBranchId);
   const { data: vehiclesList = [] } = useVehicles(activeBranchId);
   const { data: fishTypesList = [] } = useFishTypes(activeBranchId);
 
-  // Quick-creation mutations on the fly
-  const createPartyMutation = useCreateQuickParty(activeBranchId);
-  const createFishTypeMutation = useCreateQuickFishType(activeBranchId);
-  const createVehicleMutation = useCreateQuickVehicle(activeBranchId);
-
-  // Dynamic quick-pick fish chips combining DB masters & defaults
+  // Dynamic quick-pick fish chips strictly from DB masters
   const dynamicFishChips = useMemo(() => {
-    const fromDb = fishTypesList.map((f) => f.name.toUpperCase());
-    const combined = new Set([...fromDb, ...DEFAULT_FISH_SPECIES]);
-    return Array.from(combined);
+    return fishTypesList.map((f) => f.name.toUpperCase());
   }, [fishTypesList]);
 
-  // Dynamic quick-pick vehicle chips combining DB masters & defaults
+  // Dynamic quick-pick vehicle chips strictly from DB masters
   const dynamicVehicleChips = useMemo(() => {
-    const fromDb = vehiclesList.map((v) => v.vehicle_no.toUpperCase());
-    const combined = new Set([...fromDb, ...DEFAULT_VEHICLES]);
-    return Array.from(combined).slice(0, 10);
+    return vehiclesList.map((v) => v.vehicle_no.toUpperCase());
   }, [vehiclesList]);
 
   // Workflow Step: 'fish' (Step 1: Fish & Remarks) | 'weights' (Step 2: Vehicle & Weights)
@@ -275,9 +260,25 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
     );
   };
 
+  // Verify party exists in database masters
+  const partyExists = useMemo(() => {
+    if (!partySearch.trim()) return false;
+    return partiesList.some(
+      (p) => p.name.trim().toUpperCase() === partySearch.trim().toUpperCase()
+    );
+  }, [partySearch, partiesList]);
+
+  // Verify vehicle exists in database masters
+  const vehicleExists = useMemo(() => {
+    if (!vehicleNo.trim()) return false;
+    return vehiclesList.some(
+      (v) => v.vehicle_no.trim().toUpperCase() === vehicleNo.trim().toUpperCase()
+    );
+  }, [vehicleNo, vehiclesList]);
+
   // Step 1 Validation
   const canProceedToWeights = useMemo(() => {
-    if (!partySearch.trim()) return false;
+    if (!partySearch.trim() || !partyExists) return false;
     if (lines.length === 0) return false;
     return lines.every((l) => {
       const bCount = parseInt(l.boxes, 10);
@@ -287,12 +288,20 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
       const totalPct = l.parts.reduce((sum, p) => sum + (parseFloat(p.pct) || 0), 0);
       return Math.abs(totalPct - 100) < 0.01;
     });
-  }, [partySearch, lines]);
+  }, [partySearch, partyExists, lines]);
 
   // Submit Weighbridge Entry
   const handleSaveAndSend = async () => {
+    if (!partyExists) {
+      setErrorMessage(`Vendor "${partySearch.trim()}" does not exist in master data. Billing staff must add this vendor first.`);
+      return;
+    }
     if (!vehicleNo.trim()) {
       setErrorMessage('Vehicle number is required');
+      return;
+    }
+    if (!vehicleExists) {
+      setErrorMessage(`Vehicle "${vehicleNo.trim()}" does not exist in master records. Billing staff must register this vehicle first.`);
       return;
     }
     if (!weightsValid) {
@@ -415,7 +424,7 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
             className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-900 focus:outline-none focus:border-amber-500"
           />
 
-          {/* Chips */}
+          {/* Chips strictly from DB */}
           <div className="flex flex-wrap gap-1.5 pt-1 max-h-32 overflow-y-auto">
             {filteredParties.map((pName) => {
               const isSelected = partySearch === pName;
@@ -433,25 +442,17 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
                 </button>
               );
             })}
-            {partySearch.trim() && !filteredParties.includes(partySearch.trim()) && (
-              <button
-                type="button"
-                disabled={createPartyMutation.isPending}
-                onClick={async () => {
-                  const newName = partySearch.trim();
-                  try {
-                    await createPartyMutation.mutateAsync({ name: newName });
-                  } catch (err) {
-                    console.warn('[Weighbridge] Party quick-creation:', err.message);
-                  }
-                  setPartySearch(newName);
-                }}
-                className="text-xs font-bold px-3 py-1.5 rounded-xl border border-dashed border-amber-400 bg-amber-50 text-amber-800 hover:bg-amber-100 transition-all flex items-center gap-1"
-              >
-                <Plus className="w-3.5 h-3.5" /> Add "{partySearch.trim()}" to Masters
-              </button>
-            )}
           </div>
+
+          {/* Error when typed vendor is not in database */}
+          {partySearch.trim() && !partyExists && (
+            <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
+              <span>
+                Vendor "{partySearch.trim()}" does not exist in master data. Billing staff must add this vendor first.
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Remarks: Fish Box Lines */}
@@ -593,55 +594,63 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
             <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
               Tap to Add Fish
             </div>
-            <div className="flex flex-wrap gap-1.5">
-              {dynamicFishChips.map((chip) => (
+            {dynamicFishChips.length === 0 ? (
+              <p className="text-xs text-amber-800 bg-amber-50 p-2.5 rounded-xl border border-amber-200">
+                No fish species found in database. Billing staff must add fish species via Master Data first.
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {dynamicFishChips.map((chip) => (
+                  <button
+                    key={chip}
+                    type="button"
+                    onClick={() => handleAddFish(chip)}
+                    className="touch-key text-xs font-bold px-3 py-1.5 rounded-xl bg-white border border-slate-300 text-slate-800 hover:bg-slate-50 active:bg-slate-100 shadow-sm"
+                  >
+                    {chip}
+                  </button>
+                ))}
                 <button
-                  key={chip}
                   type="button"
-                  onClick={() => handleAddFish(chip)}
-                  className="touch-key text-xs font-bold px-3 py-1.5 rounded-xl bg-white border border-slate-300 text-slate-800 hover:bg-slate-50 active:bg-slate-100 shadow-sm"
+                  onClick={() => setShowOtherInput(!showOtherInput)}
+                  className="touch-key text-xs font-semibold px-3 py-1.5 rounded-xl border border-dashed border-slate-300 text-slate-600"
                 >
-                  {chip}
+                  Find other…
                 </button>
-              ))}
-              <button
-                type="button"
-                onClick={() => setShowOtherInput(!showOtherInput)}
-                className="touch-key text-xs font-semibold px-3 py-1.5 rounded-xl border border-dashed border-slate-300 text-slate-600"
-              >
-                Other…
-              </button>
-            </div>
+              </div>
+            )}
 
             {showOtherInput && (
-              <div className="flex gap-2 mt-2">
-                <input
-                  type="text"
-                  placeholder="Fish species name"
-                  value={otherFishInput}
-                  onChange={(e) => setOtherFishInput(e.target.value.toUpperCase())}
-                  className="flex-1 bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-900"
-                />
-                <button
-                  type="button"
-                  disabled={createFishTypeMutation.isPending || !otherFishInput.trim()}
-                  onClick={async () => {
-                    if (otherFishInput.trim()) {
+              <div className="mt-2 space-y-1.5">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Search registered species..."
+                    value={otherFishInput}
+                    onChange={(e) => setOtherFishInput(e.target.value.toUpperCase())}
+                    className="flex-1 bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-900"
+                  />
+                  <button
+                    type="button"
+                    disabled={!otherFishInput.trim() || !dynamicFishChips.includes(otherFishInput.trim())}
+                    onClick={() => {
                       const fishName = otherFishInput.trim().toUpperCase();
-                      try {
-                        await createFishTypeMutation.mutateAsync({ name: fishName });
-                      } catch (err) {
-                        console.warn('[Weighbridge] Fish quick-creation:', err.message);
+                      if (dynamicFishChips.includes(fishName)) {
+                        handleAddFish(fishName);
+                        setOtherFishInput('');
+                        setShowOtherInput(false);
                       }
-                      handleAddFish(fishName);
-                      setOtherFishInput('');
-                      setShowOtherInput(false);
-                    }
-                  }}
-                  className="px-4 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold shadow-sm disabled:opacity-40"
-                >
-                  {createFishTypeMutation.isPending ? 'Saving...' : 'Add to Catalog'}
-                </button>
+                    }}
+                    className="px-4 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold shadow-sm disabled:opacity-40"
+                  >
+                    Select Species
+                  </button>
+                </div>
+                {otherFishInput.trim() && !dynamicFishChips.includes(otherFishInput.trim()) && (
+                  <p className="text-xs text-rose-600 font-bold">
+                    Species "{otherFishInput.trim()}" is not registered in catalog. Billing staff must add it first.
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -663,15 +672,17 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
             <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
             <span>
               {!partySearch.trim()
-                ? 'Please select or enter a party / vendor.'
-                : lines.some((l) => !(parseInt(l.boxes, 10) > 0))
-                  ? 'Please enter the number of boxes.'
-                  : lines.some((l) => {
-                    const total = l.parts.reduce((s, p) => s + (parseFloat(p.pct) || 0), 0);
-                    return total > 100;
-                  })
-                    ? 'Box mix percentage cannot exceed 100%.'
-                    : 'Every box mix must total exactly 100% before proceeding.'}
+                ? 'Please select a registered party / vendor.'
+                : !partyExists
+                  ? `Vendor "${partySearch.trim()}" is not in database. Billing staff must add this vendor first.`
+                  : lines.some((l) => !(parseInt(l.boxes, 10) > 0))
+                    ? 'Please enter the number of boxes.'
+                    : lines.some((l) => {
+                      const total = l.parts.reduce((s, p) => s + (parseFloat(p.pct) || 0), 0);
+                      return total > 100;
+                    })
+                      ? 'Box mix percentage cannot exceed 100%.'
+                      : 'Every box mix must total exactly 100% before proceeding.'}
             </span>
           </div>
         )}
@@ -760,38 +771,34 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
           </div>
         </div>
 
-        {/* Quick Recent Vehicles from Masters DB */}
-        <div className="flex gap-1.5 overflow-x-auto pt-1">
-          {dynamicVehicleChips.map((v) => (
-            <button
-              key={v}
-              type="button"
-              onClick={() => setVehicleNo(v)}
-              className={`text-[11px] font-mono font-bold px-2.5 py-1 rounded-lg border whitespace-nowrap ${vehicleNo === v
-                ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
-                : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
-                }`}
-            >
-              {v}
-            </button>
-          ))}
-          {vehicleNo.trim() && !dynamicVehicleChips.includes(vehicleNo.trim()) && (
-            <button
-              type="button"
-              disabled={createVehicleMutation.isPending}
-              onClick={async () => {
-                try {
-                  await createVehicleMutation.mutateAsync({ vehicle_no: vehicleNo.trim() });
-                } catch (err) {
-                  console.warn('[Weighbridge] Vehicle quick-creation:', err.message);
-                }
-              }}
-              className="text-[11px] font-mono font-bold px-2.5 py-1 rounded-lg border border-dashed border-amber-400 bg-amber-50 text-amber-800 whitespace-nowrap"
-            >
-              + Save "{vehicleNo.trim()}" to Masters
-            </button>
-          )}
-        </div>
+        {/* Quick Recent Vehicles strictly from Masters DB */}
+        {dynamicVehicleChips.length > 0 && (
+          <div className="flex gap-1.5 overflow-x-auto pt-1">
+            {dynamicVehicleChips.map((v) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setVehicleNo(v)}
+                className={`text-[11px] font-mono font-bold px-2.5 py-1 rounded-lg border whitespace-nowrap ${vehicleNo === v
+                  ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
+                  : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                  }`}
+              >
+                {v}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Error if typed vehicle does not exist in DB */}
+        {vehicleNo.trim() && !vehicleExists && (
+          <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
+            <span>
+              Vehicle "{vehicleNo.trim()}" does not exist in master records. Billing staff must register this vehicle first.
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Gross, Tare, Ice/Water Cards with Direct Keyboard Entry */}
@@ -900,7 +907,7 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
       <button
         type="button"
         onClick={handleSaveAndSend}
-        disabled={submitting || !weightsValid || !vehicleNo.trim()}
+        disabled={submitting || !weightsValid || !vehicleNo.trim() || !vehicleExists || !partyExists}
         className="touch-key w-full py-4 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-40"
       >
         <CheckCircle2 className="w-4 h-4 stroke-[2.5]" />
