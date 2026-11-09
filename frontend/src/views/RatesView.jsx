@@ -4,18 +4,6 @@ import { BadgeDollarSign, Lock, Check, AlertCircle, ArrowRight, SkipForward } fr
 import { useBranch } from '../context/BranchContext';
 import { api } from '../services/api';
 
-const LAST_KNOWN_RATES = {
-  CHAMBAN: 36,
-  SARDINE: 40,
-  AILE: 30,
-  DISCO: 35,
-  MIX: 30,
-  THAKATTE: 28,
-  THONDE: 34,
-  PAMBOL: 34,
-  KODANDE: 33,
-};
-
 export default function RatesView({ initialEntryId = null, onDone }) {
   const { activeBranchId, activeBranch, availableBranches, setActiveBranchId } = useBranch();
   const queryClient = useQueryClient();
@@ -30,6 +18,33 @@ export default function RatesView({ initialEntryId = null, onDone }) {
     enabled: !!activeBranchId,
     refetchOnMount: 'always',
   });
+
+  // Derive real historical last rates per fish species strictly from actual database records
+  const historicalRates = useMemo(() => {
+    const map = {};
+    if (!Array.isArray(entries)) return map;
+
+    // Sort entries chronologically descending (newest first)
+    const sorted = [...entries].sort((a, b) => {
+      const dDiff = new Date(b.entry_date) - new Date(a.entry_date);
+      if (dDiff !== 0) return dDiff;
+      return (b.daily_sl_no || 0) - (a.daily_sl_no || 0);
+    });
+
+    sorted.forEach((e) => {
+      if (Array.isArray(e.rates)) {
+        e.rates.forEach((r) => {
+          const fName = (r.fish_name || '').toUpperCase().trim();
+          const rate = parseFloat(r.rate_per_kg);
+          if (fName && rate > 0 && !map[fName]) {
+            map[fName] = rate;
+          }
+        });
+      }
+    });
+
+    return map;
+  }, [entries]);
 
   // Pending queue of entry IDs
   const [queue, setQueue] = useState([]);
@@ -64,6 +79,7 @@ export default function RatesView({ initialEntryId = null, onDone }) {
 
       currentEntry.boxes.forEach((b, idx) => {
         const key = b.id || String(idx);
+        const fUpper = (b.fish_name || '').toUpperCase().trim();
         const partObj = {
           key,
           box_id: b.id,
@@ -71,7 +87,7 @@ export default function RatesView({ initialEntryId = null, onDone }) {
           box_count: b.box_count,
           pct: parseFloat(b.mix_percentage) || 100,
           fish_count: b.fish_count || null,
-          lastRate: LAST_KNOWN_RATES[b.fish_name] || 35,
+          lastRate: historicalRates[fUpper] || null,
         };
 
         const gId = b.box_group_id;
@@ -108,14 +124,8 @@ export default function RatesView({ initialEntryId = null, onDone }) {
       return groups;
     }
 
-    return [
-      {
-        groupId: 'default',
-        box_count: 10,
-        parts: [{ key: '0', fish: 'CHAMBAN', box_count: 10, pct: 100, lastRate: 36 }],
-      },
-    ];
-  }, [currentEntry]);
+    return [];
+  }, [currentEntry, historicalRates]);
 
   // Flattened parts for inputs, keypad, and mutation submission
   const parts = useMemo(() => {
@@ -358,10 +368,13 @@ export default function RatesView({ initialEntryId = null, onDone }) {
                             </span>
                           )}
                         </div>
-                        <p className="text-xs text-slate-500 mt-0.5">
-                          {p.fish_count ? `${p.fish_count} count · ` : ''}
-                          {p.lastRate ? `last ₹${p.lastRate}/kg` : ''}
-                        </p>
+                        {(p.fish_count || p.lastRate) && (
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            {p.fish_count ? `${p.fish_count} count` : ''}
+                            {p.fish_count && p.lastRate ? ' · ' : ''}
+                            {p.lastRate ? `last ₹${p.lastRate}/kg` : ''}
+                          </p>
+                        )}
                       </div>
 
                       <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
