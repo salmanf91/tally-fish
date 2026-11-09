@@ -8,6 +8,9 @@ const { inputSanitizer } = require('./middleware/sanitizer');
 
 const app = express();
 
+// Trust reverse proxy (Nginx) for accurate client IP identification in rate limiters
+app.set('trust proxy', 1);
+
 // =============================================================================
 // POLICY 3, 4, 5 — HTTP SECURITY HEADERS, HSTS, CSP & CLICKJACKING PROTECTION
 // =============================================================================

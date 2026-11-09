@@ -74,6 +74,14 @@ async function seed() {
       VALUES
         (gen_random_uuid(), NULL, 'CHAMBAN', 'CHM', 45.00, true),
         (gen_random_uuid(), NULL, 'SARDINE', 'SAR', 35.00, true),
+        (gen_random_uuid(), NULL, 'KODANDE', 'KOD', 30.00, true),
+        (gen_random_uuid(), NULL, 'MURU HEAD', 'MUR', 40.00, true),
+        (gen_random_uuid(), NULL, 'GOLAI', 'GOL', 50.00, true),
+        (gen_random_uuid(), NULL, 'THONDE', 'THO', 55.00, true),
+        (gen_random_uuid(), NULL, 'AILE', 'AIL', 42.00, true),
+        (gen_random_uuid(), NULL, 'DISCO', 'DIS', 38.00, true),
+        (gen_random_uuid(), NULL, 'PAMBOL', 'PAM', 65.00, true),
+        (gen_random_uuid(), NULL, 'THAKATTE', 'THA', 48.00, true),
         (gen_random_uuid(), NULL, 'MIX', 'MIX', 25.00, true),
         (gen_random_uuid(), NULL, 'MACKEREL', 'MCK', 60.00, true)
       ON CONFLICT DO NOTHING;
@@ -93,6 +101,10 @@ async function seed() {
     await client.query(`
       INSERT INTO vehicles (id, branch_id, vehicle_no, party_id, is_active)
       VALUES
+        (gen_random_uuid(), '${ullalId}', 'KL 59Z 5206', ${party1Id ? `'${party1Id}'` : 'NULL'}, true),
+        (gen_random_uuid(), '${ullalId}', 'KA 19D 7628', NULL, true),
+        (gen_random_uuid(), '${ullalId}', 'KA 19AE 6136', NULL, true),
+        (gen_random_uuid(), '${ullalId}', 'KA 09C 8942', NULL, true),
         (gen_random_uuid(), '${ullalId}', 'KA-19-AB-1234', ${party1Id ? `'${party1Id}'` : 'NULL'}, true),
         (gen_random_uuid(), '${ullalId}', 'KA-19-CD-5678', NULL, true)
       ON CONFLICT DO NOTHING;

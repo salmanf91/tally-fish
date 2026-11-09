@@ -94,7 +94,16 @@ async function createEntry(req, res, next) {
           resolvedPartyId = partyLookup.rows[0].id;
           resolvedPartyName = partyLookup.rows[0].name;
         } else {
-          throw new Error(`Party "${resolvedPartyName}" not found in masters. Please select a registered vendor or create it via Master Data.`);
+          // Auto-register party under the branch so weighbridge flow is seamless
+          const newParty = await client.query(
+            `INSERT INTO parties (id, branch_id, name, is_active)
+             VALUES (gen_random_uuid(), $1, $2, true)
+             ON CONFLICT (branch_id, name) DO UPDATE SET is_active = true
+             RETURNING id, name`,
+            [branchId, resolvedPartyName]
+          );
+          resolvedPartyId = newParty.rows[0].id;
+          resolvedPartyName = newParty.rows[0].name;
         }
       } else {
         throw new Error('Either party_id or party_name must be provided');
@@ -122,7 +131,16 @@ async function createEntry(req, res, next) {
           resolvedVehicleId = vehicleLookup.rows[0].id;
           resolvedVehicleNo = vehicleLookup.rows[0].vehicle_no;
         } else {
-          throw new Error(`Vehicle "${resolvedVehicleNo}" not found in masters. Please register the vehicle via Master Data.`);
+          // Auto-register vehicle under the branch
+          const newVeh = await client.query(
+            `INSERT INTO vehicles (id, branch_id, vehicle_no, party_id, is_active)
+             VALUES (gen_random_uuid(), $1, $2, $3, true)
+             ON CONFLICT (branch_id, vehicle_no) DO UPDATE SET is_active = true
+             RETURNING id, vehicle_no`,
+            [branchId, resolvedVehicleNo, resolvedPartyId]
+          );
+          resolvedVehicleId = newVeh.rows[0].id;
+          resolvedVehicleNo = newVeh.rows[0].vehicle_no;
         }
       } else {
         throw new Error('Either vehicle_id or vehicle_no must be provided');
@@ -152,7 +170,16 @@ async function createEntry(req, res, next) {
             fId = fishLookup.rows[0].id;
             fName = fishLookup.rows[0].name;
           } else {
-            throw new Error(`Fish species "${fName}" not found in catalog. Please select a registered species or add it via Master Data.`);
+            // Auto-register fish species globally
+            const newFish = await client.query(
+              `INSERT INTO fish_types (id, branch_id, name, is_active)
+               VALUES (gen_random_uuid(), NULL, $1, true)
+               ON CONFLICT (branch_id, name) DO UPDATE SET is_active = true
+               RETURNING id, name`,
+              [fName]
+            );
+            fId = newFish.rows[0].id;
+            fName = newFish.rows[0].name;
           }
         } else {
           throw new Error('Fish specification requires fish_type_id or fish_name');
