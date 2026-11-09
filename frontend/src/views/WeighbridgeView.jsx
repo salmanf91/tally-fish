@@ -17,6 +17,7 @@ import {
   useParties,
   useVehicles,
   useFishTypes,
+  useCreateQuickFishType,
 } from '../hooks/useMasters';
 import { api } from '../services/api';
 import { saveOfflineEntry } from '../services/db';
@@ -37,6 +38,9 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
   const { data: partiesList = [], refetch: refetchParties } = useParties(activeBranchId);
   const { data: vehiclesList = [] } = useVehicles(activeBranchId);
   const { data: fishTypesList = [] } = useFishTypes(activeBranchId);
+
+  // Quick-save fish mutation when added via "Other..."
+  const createFishTypeMutation = useCreateQuickFishType(activeBranchId);
 
   // Dynamic quick-pick fish chips strictly from DB masters
   const dynamicFishChips = useMemo(() => {
@@ -594,63 +598,56 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
             <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
               Tap to Add Fish
             </div>
-            {dynamicFishChips.length === 0 ? (
-              <p className="text-xs text-amber-800 bg-amber-50 p-2.5 rounded-xl border border-amber-200">
-                No fish species found in database. Billing staff must add fish species via Master Data first.
-              </p>
-            ) : (
-              <div className="flex flex-wrap gap-1.5">
-                {dynamicFishChips.map((chip) => (
-                  <button
-                    key={chip}
-                    type="button"
-                    onClick={() => handleAddFish(chip)}
-                    className="touch-key text-xs font-bold px-3 py-1.5 rounded-xl bg-white border border-slate-300 text-slate-800 hover:bg-slate-50 active:bg-slate-100 shadow-sm"
-                  >
-                    {chip}
-                  </button>
-                ))}
+            <div className="flex flex-wrap gap-1.5">
+              {dynamicFishChips.map((chip) => (
                 <button
+                  key={chip}
                   type="button"
-                  onClick={() => setShowOtherInput(!showOtherInput)}
-                  className="touch-key text-xs font-semibold px-3 py-1.5 rounded-xl border border-dashed border-slate-300 text-slate-600"
+                  onClick={() => handleAddFish(chip)}
+                  className="touch-key text-xs font-bold px-3 py-1.5 rounded-xl bg-white border border-slate-300 text-slate-800 hover:bg-slate-50 active:bg-slate-100 shadow-sm"
                 >
-                  Find other…
+                  {chip}
                 </button>
-              </div>
-            )}
+              ))}
+              <button
+                type="button"
+                onClick={() => setShowOtherInput(!showOtherInput)}
+                className="touch-key text-xs font-semibold px-3 py-1.5 rounded-xl border border-dashed border-slate-300 text-slate-600 hover:border-amber-400 hover:text-amber-800 transition-all"
+              >
+                Other…
+              </button>
+            </div>
 
             {showOtherInput && (
-              <div className="mt-2 space-y-1.5">
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="Search registered species..."
-                    value={otherFishInput}
-                    onChange={(e) => setOtherFishInput(e.target.value.toUpperCase())}
-                    className="flex-1 bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-900"
-                  />
-                  <button
-                    type="button"
-                    disabled={!otherFishInput.trim() || !dynamicFishChips.includes(otherFishInput.trim())}
-                    onClick={() => {
-                      const fishName = otherFishInput.trim().toUpperCase();
-                      if (dynamicFishChips.includes(fishName)) {
-                        handleAddFish(fishName);
-                        setOtherFishInput('');
-                        setShowOtherInput(false);
+              <div className="flex gap-2 mt-2">
+                <input
+                  type="text"
+                  maxLength={50}
+                  placeholder="Fish species name"
+                  value={otherFishInput}
+                  onChange={(e) => setOtherFishInput(e.target.value.toUpperCase())}
+                  className="flex-1 bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-amber-500"
+                />
+                <button
+                  type="button"
+                  disabled={!otherFishInput.trim() || createFishTypeMutation.isPending}
+                  onClick={async () => {
+                    const fishName = otherFishInput.trim().toUpperCase();
+                    if (fishName) {
+                      try {
+                        await createFishTypeMutation.mutateAsync({ name: fishName });
+                      } catch (err) {
+                        console.warn('[Weighbridge] Fish quick-save:', err.message);
                       }
-                    }}
-                    className="px-4 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold shadow-sm disabled:opacity-40"
-                  >
-                    Select Species
-                  </button>
-                </div>
-                {otherFishInput.trim() && !dynamicFishChips.includes(otherFishInput.trim()) && (
-                  <p className="text-xs text-rose-600 font-bold">
-                    Species "{otherFishInput.trim()}" is not registered in catalog. Billing staff must add it first.
-                  </p>
-                )}
+                      handleAddFish(fishName);
+                      setOtherFishInput('');
+                      setShowOtherInput(false);
+                    }
+                  }}
+                  className="px-4 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold shadow-sm disabled:opacity-40"
+                >
+                  {createFishTypeMutation.isPending ? 'Adding...' : 'Add Fish'}
+                </button>
               </div>
             )}
           </div>
