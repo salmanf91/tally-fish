@@ -28,6 +28,109 @@ const CLIENT_PHONES = {
   'M HANEEF': '+91 98450 10007',
 };
 
+// Reconstruct grouped box lots for display & exports
+export function getEntryLots(entry) {
+  if (!entry) return [];
+  const boxes = Array.isArray(entry.boxes) ? entry.boxes : [];
+  const rates = Array.isArray(entry.rates) ? entry.rates : [];
+
+  if (boxes.length === 0) {
+    if (rates.length > 0) {
+      return [
+        {
+          groupId: 'default',
+          box_count: 1,
+          isMixed: rates.length > 1,
+          avgRate: null,
+          parts: rates.map((r) => ({
+            fish: r.fish_name,
+            pct: 100,
+            rate: parseFloat(r.rate_per_kg) || 0,
+          })),
+        },
+      ];
+    }
+    return [];
+  }
+
+  const groups = [];
+
+  boxes.forEach((b, idx) => {
+    // Find rate matching this box specifically by box_id, or fallback to fish_name
+    const matchedRate =
+      rates.find((r) => r.box_id && r.box_id === b.id) ||
+      rates.find((r) => r.fish_name === b.fish_name);
+
+    const rateVal =
+      matchedRate && matchedRate.rate_per_kg !== null && matchedRate.rate_per_kg !== undefined
+        ? parseFloat(matchedRate.rate_per_kg)
+        : null;
+
+    const partObj = {
+      box_id: b.id,
+      fish: b.fish_name,
+      box_count: b.box_count,
+      pct: parseFloat(b.mix_percentage) || 100,
+      fish_count: b.fish_count || null,
+      rate: rateVal,
+    };
+
+    const gId = b.box_group_id;
+
+    if (gId) {
+      let found = groups.find((g) => g.groupId === gId);
+      if (!found) {
+        found = {
+          groupId: gId,
+          box_count: b.box_count,
+          parts: [],
+        };
+        groups.push(found);
+      }
+      found.parts.push(partObj);
+    } else {
+      // Group adjacent items if they have identical box_count and cumulative pct <= 100
+      const pct = parseFloat(b.mix_percentage) || 100;
+      const lastGroup = groups[groups.length - 1];
+      const lastSumPct = lastGroup ? lastGroup.parts.reduce((s, p) => s + p.pct, 0) : 100;
+
+      if (lastGroup && lastGroup.box_count === b.box_count && lastSumPct + pct <= 100.01) {
+        lastGroup.parts.push(partObj);
+      } else {
+        groups.push({
+          groupId: `lot_${idx}`,
+          box_count: b.box_count,
+          parts: [partObj],
+        });
+      }
+    }
+  });
+
+  return groups.map((lot) => {
+    const isMixed = lot.parts.length > 1 || (lot.parts[0]?.pct > 0 && lot.parts[0]?.pct < 100);
+    let avgRate = null;
+    if (isMixed) {
+      let sum = 0;
+      let totalPct = 0;
+      lot.parts.forEach((p) => {
+        if (p.rate !== null && p.rate !== undefined) {
+          sum += p.rate * p.pct;
+          totalPct += p.pct;
+        }
+      });
+      avgRate = totalPct > 0 ? (sum / totalPct).toFixed(2) : null;
+    } else if (lot.parts[0]?.rate !== null && lot.parts[0]?.rate !== undefined) {
+      avgRate = Number(lot.parts[0].rate).toFixed(2);
+    }
+
+    return {
+      ...lot,
+      isMixed,
+      avgRate,
+    };
+  });
+}
+
 export default function StatementView({ onNavigateToRates }) {
   const { activeBranchId, activeBranch, availableBranches, setActiveBranchId } = useBranch();
   const { user } = useAuth();
@@ -132,13 +235,20 @@ export default function StatementView({ onNavigateToRates }) {
       filteredEntries.forEach((e, idx) => {
         totalNet += parseFloat(e.net_kg) || 0;
         msg += `${idx + 1}) ${e.party_name} · ${e.vehicle_no || 'No Vehicle'} · ${Number(e.net_kg).toLocaleString()} kg\n`;
-        msg += `   ${e.remarks || 'Raw catch'}`;
-        if (e.rates && e.rates.length > 0) {
-          msg += ` → ${e.rates.map((r) => `${r.fish_name} ₹${r.rate_per_kg}`).join(', ')}`;
+        const lots = getEntryLots(e);
+        if (e.status === 'RATE_PENDING' || lots.length === 0) {
+          msg += `   Rates: Rate Pending\n\n`;
         } else {
-          msg += ` → Rate Pending`;
+          lots.forEach((lot) => {
+            const pStr = lot.parts
+              .map((p) => `${p.fish}${lot.isMixed ? ` (${p.pct}%)` : ''} ₹${p.rate !== null && p.rate !== undefined ? p.rate : '—'}`)
+              .join(', ');
+            msg += `   ${lot.box_count} Box${lot.box_count > 1 ? 'es' : ''}: ${pStr}${
+              lot.isMixed && lot.avgRate ? ` (Avg: ₹${lot.avgRate}/kg)` : ''
+            }\n`;
+          });
+          msg += '\n';
         }
-        msg += '\n\n';
       });
       msg += `Total slips: ${filteredEntries.length}\nTotal net: ${Number(totalNet).toLocaleString()} kg\nFormat: ${shareFormat}`;
       return msg;
@@ -155,13 +265,20 @@ export default function StatementView({ onNavigateToRates }) {
     partyEntries.forEach((e, idx) => {
       partyTotalNet += parseFloat(e.net_kg) || 0;
       msg += `${idx + 1}) ${e.vehicle_no || 'No Vehicle'} · ${Number(e.net_kg).toLocaleString()} kg\n`;
-      msg += `   ${e.remarks || 'Raw catch'}`;
-      if (e.rates && e.rates.length > 0) {
-        msg += ` → ₹${e.rates.map((r) => `${r.fish_name} ₹${r.rate_per_kg}`).join(', ')}`;
+      const lots = getEntryLots(e);
+      if (e.status === 'RATE_PENDING' || lots.length === 0) {
+        msg += `   Rates: Rate Pending\n\n`;
       } else {
-        msg += ` → Rate Pending`;
+        lots.forEach((lot) => {
+          const pStr = lot.parts
+            .map((p) => `${p.fish}${lot.isMixed ? ` (${p.pct}%)` : ''} ₹${p.rate !== null && p.rate !== undefined ? p.rate : '—'}`)
+            .join(', ');
+          msg += `   ${lot.box_count} Box${lot.box_count > 1 ? 'es' : ''}: ${pStr}${
+            lot.isMixed && lot.avgRate ? ` (Avg: ₹${lot.avgRate}/kg)` : ''
+          }\n`;
+        });
+        msg += '\n';
       }
-      msg += '\n\n';
     });
 
     msg += `Total net: ${Number(partyTotalNet).toLocaleString()} kg\nReport attached (${shareFormat}).`;
@@ -254,7 +371,6 @@ export default function StatementView({ onNavigateToRates }) {
       'Net Weight (kg)',
       'Remarks / Box Mix',
       'Rate Details (₹/kg)',
-      'Total Amount (₹)',
       'Status',
     ];
 
@@ -265,15 +381,22 @@ export default function StatementView({ onNavigateToRates }) {
     };
 
     const rows = filteredEntries.map((e, idx) => {
-      const rateDetails =
-        e.rates && e.rates.length > 0
-          ? e.rates.map((r) => `${r.fish_name}: ₹${r.rate_per_kg}`).join('; ')
-          : e.status === 'RATE_PENDING'
-          ? 'Rate Pending'
-          : '—';
+      const lots = getEntryLots(e);
+      let rateDetails = 'Rate Pending';
+      if (e.status !== 'RATE_PENDING' && lots.length > 0) {
+        rateDetails = lots
+          .map((lot) => {
+            const partsStr = lot.parts
+              .map((p) => `${p.fish}${lot.isMixed ? ` (${p.pct}%)` : ''}: ₹${p.rate !== null && p.rate !== undefined ? p.rate : '—'}`)
+              .join(', ');
+            return `${lot.box_count} Box${lot.box_count > 1 ? 'es' : ''} [${partsStr}${
+              lot.isMixed && lot.avgRate ? ` | Avg: ₹${lot.avgRate}/kg` : ''
+            }]`;
+          })
+          .join('; ');
+      }
 
       const dateStr = e.entry_date ? e.entry_date.split('T')[0] : '';
-      const totalAmt = e.total_amount ? Number(e.total_amount).toFixed(2) : '';
 
       return [
         idx + 1,
@@ -287,7 +410,6 @@ export default function StatementView({ onNavigateToRates }) {
         parseFloat(e.net_kg) || 0,
         escapeCSV(e.remarks || ''),
         escapeCSV(rateDetails),
-        totalAmt,
         escapeCSV(e.status || ''),
       ].join(',');
     });
@@ -296,7 +418,6 @@ export default function StatementView({ onNavigateToRates }) {
     const totalTare = filteredEntries.reduce((s, e) => s + (parseFloat(e.empty_tare_kg) || 0), 0);
     const totalIce = filteredEntries.reduce((s, e) => s + (parseFloat(e.ice_water_kg) || 0), 0);
     const totalNet = filteredEntries.reduce((s, e) => s + (parseFloat(e.net_kg) || 0), 0);
-    const grandAmount = filteredEntries.reduce((s, e) => s + (parseFloat(e.total_amount) || 0), 0);
 
     const totalsRow = [
       'TOTAL',
@@ -310,7 +431,6 @@ export default function StatementView({ onNavigateToRates }) {
       totalNet,
       '',
       '',
-      grandAmount > 0 ? grandAmount.toFixed(2) : '',
       '',
     ].join(',');
 
@@ -345,7 +465,6 @@ export default function StatementView({ onNavigateToRates }) {
     const totalTare = filteredEntries.reduce((s, e) => s + (parseFloat(e.empty_tare_kg) || 0), 0);
     const totalIce = filteredEntries.reduce((s, e) => s + (parseFloat(e.ice_water_kg) || 0), 0);
     const totalNet = filteredEntries.reduce((s, e) => s + (parseFloat(e.net_kg) || 0), 0);
-    const totalAmt = filteredEntries.reduce((s, e) => s + (parseFloat(e.total_amount) || 0), 0);
 
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
@@ -355,18 +474,35 @@ export default function StatementView({ onNavigateToRates }) {
 
     const tableRowsHtml = filteredEntries
       .map((e, idx) => {
-        const rateText =
-          e.rates && e.rates.length > 0
-            ? e.rates.map((r) => `${r.fish_name}: ₹${r.rate_per_kg}`).join('<br>')
-            : e.status === 'RATE_PENDING'
-            ? '<span style="color:#b45309">Rate Pending</span>'
+        const lots = getEntryLots(e);
+        const rateHtml =
+          e.status === 'RATE_PENDING'
+            ? '<span style="color:#b45309; font-weight: bold;">Rate Pending</span>'
+            : lots.length > 0
+            ? lots
+                .map((l) => {
+                  const partsHtml = l.parts
+                    .map(
+                      (p) =>
+                        `<div style="display:flex; justify-content:space-between; gap:10px; font-size:10.5px; padding:1px 0;">
+                           <span>${p.fish}${l.isMixed ? ` <span style="color:#64748b;">(${p.pct}%)</span>` : ''}</span>
+                           <strong style="font-family:monospace;">₹${p.rate !== null && p.rate !== undefined ? p.rate : '—'}</strong>
+                         </div>`
+                    )
+                    .join('');
+                  return `
+                    <div style="margin-bottom: 5px; padding: 4px 6px; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; text-align: left;">
+                      <div style="display:flex; justify-content:space-between; font-weight:bold; font-size:10px; color:#334155; border-bottom:1px solid #e2e8f0; padding-bottom:2px; margin-bottom:3px;">
+                        <span>${l.box_count} ${l.box_count === 1 ? 'Box' : 'Boxes'} ${l.isMixed ? '· Mixed' : ''}</span>
+                        ${l.isMixed && l.avgRate ? `<span style="color:#1d4ed8; font-family:monospace;">Avg: ₹${l.avgRate}</span>` : ''}
+                      </div>
+                      ${partsHtml}
+                    </div>
+                  `;
+                })
+                .join('')
             : '—';
-        const amtText = e.total_amount
-          ? `₹${Number(e.total_amount).toLocaleString(undefined, {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            })}`
-          : '—';
+
         const dateStr = e.entry_date ? e.entry_date.split('T')[0] : '';
 
         return `
@@ -381,8 +517,7 @@ export default function StatementView({ onNavigateToRates }) {
             <td style="text-align: right; font-family: monospace;">${Number(e.ice_water_kg || 0).toLocaleString()}</td>
             <td style="text-align: right; font-family: monospace; font-weight: bold;">${Number(e.net_kg || 0).toLocaleString()}</td>
             <td style="font-size: 11px;">${e.remarks || '—'}</td>
-            <td style="text-align: right; font-family: monospace; font-size: 11px;">${rateText}</td>
-            <td style="text-align: right; font-family: monospace; font-weight: bold;">${amtText}</td>
+            <td style="text-align: right; font-family: monospace; font-size: 11px;">${rateHtml}</td>
           </tr>
         `;
       })
@@ -510,7 +645,6 @@ export default function StatementView({ onNavigateToRates }) {
             <div class="summary-item">Total Tare: <strong>${Number(totalTare).toLocaleString()} kg</strong></div>
             <div class="summary-item">Total Ice: <strong>${Number(totalIce).toLocaleString()} kg</strong></div>
             <div class="summary-item">Total Net Weight: <strong>${Number(totalNet).toLocaleString()} kg</strong></div>
-            ${totalAmt > 0 ? `<div class="summary-item">Total Value: <strong>₹${Number(totalAmt).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></div>` : ''}
           </div>
 
           <table>
@@ -527,7 +661,6 @@ export default function StatementView({ onNavigateToRates }) {
                 <th style="text-align: right;">Net (kg)</th>
                 <th>Remarks / Mix</th>
                 <th style="text-align: right;">Rate (₹/kg)</th>
-                <th style="text-align: right;">Amount (₹)</th>
               </tr>
             </thead>
             <tbody>
@@ -540,7 +673,6 @@ export default function StatementView({ onNavigateToRates }) {
                 <td style="text-align: right; font-family: monospace;">${Number(totalNet).toLocaleString()}</td>
                 <td></td>
                 <td></td>
-                <td style="text-align: right; font-family: monospace;">${totalAmt > 0 ? `₹${Number(totalAmt).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}</td>
               </tr>
             </tbody>
           </table>
@@ -793,20 +925,53 @@ export default function StatementView({ onNavigateToRates }) {
                           onNavigateToRates(e.id);
                         }
                       }}
-                      className={`py-3 px-3 text-right font-mono font-bold ${
-                        needsRate ? 'text-amber-600' : 'text-slate-900'
-                      } ${isOwner ? 'cursor-pointer hover:underline' : ''}`}
+                      className={`py-3 px-3 text-right font-mono ${
+                        isOwner ? 'cursor-pointer hover:opacity-80' : ''
+                      }`}
                     >
                       {needsRate ? (
-                        '—'
-                      ) : e.rates && e.rates.length > 0 ? (
-                        e.rates.map((r, i) => (
-                          <div key={i}>
-                            {r.fish_name} ₹{r.rate_per_kg}
-                          </div>
-                        ))
+                        <span className="text-amber-600 font-bold text-xs bg-amber-50 border border-amber-200 px-2 py-1 rounded-md inline-block">
+                          Rate Pending
+                        </span>
                       ) : (
-                        `₹${e.total_amount ? (e.total_amount / e.net_kg).toFixed(2) : '35.00'}`
+                        <div className="space-y-1.5 inline-flex flex-col items-end">
+                          {getEntryLots(e).map((lot, lIdx) => (
+                            <div
+                              key={lot.groupId || lIdx}
+                              className="p-2 rounded-xl bg-slate-50 border border-slate-200 text-left text-xs leading-tight min-w-[155px] shadow-2xs"
+                            >
+                              <div className="flex items-center justify-between gap-2 font-bold text-slate-700 pb-1 border-b border-slate-200/70 text-[10px]">
+                                <span className="font-mono text-slate-800 font-black">
+                                  {lot.box_count} {lot.box_count === 1 ? 'Box' : 'Boxes'} {lot.isMixed ? '· Mixed' : ''}
+                                </span>
+                                {lot.isMixed && lot.avgRate ? (
+                                  <span className="text-blue-700 font-mono font-bold">
+                                    Avg ₹{lot.avgRate}
+                                  </span>
+                                ) : !lot.isMixed && lot.avgRate ? (
+                                  <span className="text-slate-900 font-mono font-bold">
+                                    ₹{lot.avgRate}
+                                  </span>
+                                ) : null}
+                              </div>
+                              <div className="pt-1.5 space-y-1">
+                                {lot.parts.map((p, pIdx) => (
+                                  <div
+                                    key={pIdx}
+                                    className="flex items-center justify-between gap-3 text-slate-600 font-mono text-[11px]"
+                                  >
+                                    <span>
+                                      {p.fish} {lot.isMixed ? `(${p.pct}%)` : ''}
+                                    </span>
+                                    <span className="font-bold text-slate-900">
+                                      {p.rate !== null && p.rate !== undefined ? `₹${p.rate}` : '—'}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       )}
                     </td>
                   </tr>
