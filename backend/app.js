@@ -46,12 +46,17 @@ app.use(
 // =============================================================================
 // POLICY 2 — RESTRICTED CORS POLICY
 // =============================================================================
+const envOrigins = (process.env.FRONTEND_URL || '')
+  .split(',')
+  .map((s) => s.trim().replace(/\/$/, ''))
+  .filter(Boolean);
+
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
   'http://127.0.0.1:5173',
   'http://127.0.0.1:3000',
-  process.env.FRONTEND_URL,
+  ...envOrigins,
 ].filter(Boolean);
 
 const corsOptions = {
