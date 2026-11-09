@@ -861,6 +861,7 @@ export default function MastersView() {
                     <input
                       type="text"
                       required
+                      maxLength={100}
                       placeholder="e.g. Coastal Catchers Ltd"
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -873,6 +874,7 @@ export default function MastersView() {
                       <label className="text-xs font-semibold text-slate-700 block mb-1">Short Code</label>
                       <input
                         type="text"
+                        maxLength={20}
                         placeholder="e.g. CCL"
                         value={formData.code}
                         onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
@@ -883,6 +885,7 @@ export default function MastersView() {
                       <label className="text-xs font-semibold text-slate-700 block mb-1">Contact Phone</label>
                       <input
                         type="text"
+                        maxLength={25}
                         placeholder="e.g. +91 9876543210"
                         value={formData.phone}
                         onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
@@ -903,6 +906,7 @@ export default function MastersView() {
                     <input
                       type="text"
                       required
+                      maxLength={30}
                       placeholder="e.g. KA-19-AB-1234"
                       value={formData.vehicle_no}
                       onChange={(e) => setFormData({ ...formData, vehicle_no: e.target.value.toUpperCase() })}
@@ -930,6 +934,7 @@ export default function MastersView() {
                     <label className="text-xs font-semibold text-slate-700 block mb-1">Notes / Description</label>
                     <input
                       type="text"
+                      maxLength={500}
                       placeholder="e.g. 10 Ton Insulated Reefer"
                       value={formData.notes}
                       onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
@@ -949,6 +954,7 @@ export default function MastersView() {
                     <input
                       type="text"
                       required
+                      maxLength={100}
                       placeholder="e.g. SARDINE"
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value.toUpperCase() })}
@@ -961,6 +967,7 @@ export default function MastersView() {
                       <label className="text-xs font-semibold text-slate-700 block mb-1">Catalog Code</label>
                       <input
                         type="text"
+                        maxLength={20}
                         placeholder="e.g. SAR"
                         value={formData.code}
                         onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
