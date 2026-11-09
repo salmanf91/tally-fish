@@ -23,6 +23,13 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
 
+    <!-- Policy 5: Clickjacking Defence (Frame-Busting) -->
+    <script>
+      if (self !== top) {
+        top.location = self.location;
+      }
+    </script>
+
     <!-- Self-healing: In local development, purge old Service Worker and Cache Storage -->
     <script>
       if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
