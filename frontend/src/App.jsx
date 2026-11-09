@@ -137,7 +137,11 @@ function MainApp() {
           initialEntryId={selectedRateEntryId}
           onDone={() => {
             setSelectedRateEntryId(null);
-            setActiveTab('statement');
+            if (currentRole === 'billingAdmin') {
+              setActiveTab('billing');
+            } else {
+              setActiveTab('statement');
+            }
           }}
         />
       )}
