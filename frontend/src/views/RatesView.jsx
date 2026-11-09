@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { BadgeDollarSign, Lock, Check, AlertCircle, ArrowRight, SkipForward } from 'lucide-react';
+import { BadgeDollarSign, Lock, Check, AlertCircle, ArrowRight, ArrowLeft, SkipForward } from 'lucide-react';
 import { useBranch } from '../context/BranchContext';
 import { api } from '../services/api';
 
@@ -156,10 +156,11 @@ export default function RatesView({ initialEntryId = null, onDone }) {
       return res.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['entries', activeBranchId] });
-      setToastMessage(`Rate saved for Entry #${currentEntry?.daily_sl_no}! Entry locked.`);
-      // Advance queue
-      setQueue((prev) => prev.slice(1));
+      queryClient.invalidateQueries({ queryKey: ['entries'] });
+      // Go back to list or read view immediately once rate is entered
+      if (onDone) {
+        onDone();
+      }
     },
     onError: (err) => {
       setErrorMessage(err.message || 'Failed to fix rates');
@@ -261,13 +262,19 @@ export default function RatesView({ initialEntryId = null, onDone }) {
           <h2 className="text-base font-black text-slate-900">
             {currentEntry?.status === 'LOCKED' ? 'Edit Rates' : 'Set Rate'}
           </h2>
-          <p className="text-xs text-slate-500">
-            {queue.length} slip{queue.length > 1 ? 's' : ''} in queue · {activeBranch?.branch_name}
+          <p className="text-xs text-slate-500 font-mono">
+            SL #{currentEntry?.daily_sl_no} · {currentEntry?.party_name}
           </p>
         </div>
-        <span className="text-xs font-mono font-bold px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 border border-slate-200">
-          Queue #{queue.length}
-        </span>
+        {onDone && (
+          <button
+            type="button"
+            onClick={onDone}
+            className="text-xs font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-200 px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 shadow-2xs"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" /> Back to List
+          </button>
+        )}
       </div>
 
       {toastMessage && (

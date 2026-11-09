@@ -13,6 +13,7 @@ import {
   Printer,
   Copy,
   Check,
+  Edit3,
 } from 'lucide-react';
 import { useBranch } from '../context/BranchContext';
 import { useAuth } from '../context/AuthContext';
@@ -921,18 +922,32 @@ export default function StatementView({ onNavigateToRates }) {
                     </td>
                     <td
                       onClick={() => {
-                        if (isOwner && onNavigateToRates) {
+                        if ((isOwner || isBilling) && onNavigateToRates) {
                           onNavigateToRates(e.id);
                         }
                       }}
                       className={`py-3 px-3 text-right font-mono ${
-                        isOwner ? 'cursor-pointer hover:opacity-80' : ''
+                        isOwner || isBilling ? 'cursor-pointer hover:opacity-80' : ''
                       }`}
                     >
                       {needsRate ? (
-                        <span className="text-amber-600 font-bold text-xs bg-amber-50 border border-amber-200 px-2 py-1 rounded-md inline-block">
-                          Rate Pending
-                        </span>
+                        <div className="inline-flex flex-col items-end gap-1">
+                          <span className="text-amber-700 font-bold text-xs bg-amber-50 border border-amber-300 px-2 py-1 rounded-md inline-block">
+                            Rate Pending
+                          </span>
+                          {(isOwner || isBilling) && onNavigateToRates && (
+                            <button
+                              type="button"
+                              onClick={(ev) => {
+                                ev.stopPropagation();
+                                onNavigateToRates(e.id);
+                              }}
+                              className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 hover:text-amber-900 underline"
+                            >
+                              Set rate →
+                            </button>
+                          )}
+                        </div>
                       ) : (
                         <div className="space-y-1.5 inline-flex flex-col items-end">
                           {getEntryLots(e).map((lot, lIdx) => (
@@ -971,6 +986,20 @@ export default function StatementView({ onNavigateToRates }) {
                               </div>
                             </div>
                           ))}
+                          {(isOwner || isBilling) && onNavigateToRates && (
+                            <button
+                              type="button"
+                              onClick={(ev) => {
+                                ev.stopPropagation();
+                                onNavigateToRates(e.id);
+                              }}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 mt-1 rounded-lg border border-slate-200 bg-white hover:bg-amber-50 hover:border-amber-300 text-slate-600 hover:text-amber-800 text-[10px] font-bold shadow-2xs transition-all"
+                              title="Edit rates for this entry"
+                            >
+                              <Edit3 className="w-2.5 h-2.5" />
+                              <span>Edit rate</span>
+                            </button>
+                          )}
                         </div>
                       )}
                     </td>
