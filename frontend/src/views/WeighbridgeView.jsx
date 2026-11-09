@@ -284,8 +284,10 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
     return lines.every((l) => {
       const bCount = parseInt(l.boxes, 10);
       if (!(bCount > 0)) return false;
+      // Single species lot can have empty pct (implied 100%) or exact 100%
+      if (l.parts.length === 1 && !l.parts[0].pct) return true;
       const totalPct = l.parts.reduce((sum, p) => sum + (parseFloat(p.pct) || 0), 0);
-      return totalPct === 100;
+      return Math.abs(totalPct - 100) < 0.01;
     });
   }, [partySearch, lines]);
 
@@ -500,7 +502,10 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
           <div className="space-y-2">
             {lines.map((line, li) => {
               const totalPct = line.parts.reduce((acc, p) => acc + (parseFloat(p.pct) || 0), 0);
-              const pctWarn = line.parts.length > 1 && totalPct !== 100;
+              const isSingleAuto = line.parts.length === 1 && !line.parts[0].pct;
+              const effectivePct = isSingleAuto ? 100 : totalPct;
+              const isOver = effectivePct > 100;
+              const isComplete = effectivePct === 100;
 
               return (
                 <div key={li} className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
@@ -558,19 +563,21 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
                   ))}
 
                   <div className="flex items-center justify-between pt-1 text-[11px]">
-                    {pctWarn ? (
-                      <span className="text-amber-700 font-bold">
-                        Mix must total 100% (now {totalPct}%)
+                    {isOver ? (
+                      <span className="text-rose-700 font-bold">
+                        ✗ Mix exceeds 100% (currently {totalPct}%)
                       </span>
-                    ) : totalPct >= 100 ? (
+                    ) : isComplete ? (
                       <span className="text-emerald-700 font-semibold">
                         ✓ 100% complete
                       </span>
                     ) : (
-                      <span></span>
+                      <span className="text-amber-700 font-bold">
+                        Mix must total 100% (currently {totalPct}%)
+                      </span>
                     )}
 
-                    {totalPct >= 100 ? (
+                    {effectivePct >= 100 ? (
                       mixTargetIndex === li ? (
                         <button
                           type="button"
@@ -670,6 +677,25 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
             </p>
           </div>
         </div>
+
+        {/* Validation Feedback when Next is blocked */}
+        {!canProceedToWeights && (
+          <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>
+              {!partySearch.trim()
+                ? 'Please select or enter a party / vendor.'
+                : lines.some((l) => !(parseInt(l.boxes, 10) > 0))
+                ? 'Please enter the number of boxes.'
+                : lines.some((l) => {
+                    const total = l.parts.reduce((s, p) => s + (parseFloat(p.pct) || 0), 0);
+                    return total > 100;
+                  })
+                ? 'Box mix percentage cannot exceed 100%.'
+                : 'Every box mix must total exactly 100% before proceeding.'}
+            </span>
+          </div>
+        )}
 
         {/* Step 1 Next Button */}
         <button

@@ -48,8 +48,8 @@ function validateBoxMixPercentages(boxes) {
       };
     }
 
-    if (box.mix_group || box.group_id) {
-      const gKey = box.mix_group || box.group_id;
+    if (box.box_group_id || box.mix_group || box.group_id) {
+      const gKey = box.box_group_id || box.mix_group || box.group_id;
       if (!mixGroups[gKey]) mixGroups[gKey] = [];
       mixGroups[gKey].push(box);
     } else if (mix < 100) {
