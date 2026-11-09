@@ -88,8 +88,21 @@ export function useCreateQuickParty(branchId) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ name, phone }) => {
-      const res = await api.post('/masters/parties', { name, phone });
-      return res.data;
+      if (navigator.onLine) {
+        const res = await api.post('/masters/parties', { name, phone });
+        return res.data;
+      }
+      // Offline fallback: cache locally
+      const localParty = {
+        id: `offline_party_${Date.now()}`,
+        branch_id: branchId,
+        name: name.trim(),
+        phone: phone || null,
+        is_active: true,
+      };
+      const existing = (await getCachedMasters('parties', branchId)) || [];
+      await persistMasters('parties', branchId, [localParty, ...existing]);
+      return localParty;
     },
     onSuccess: (newParty) => {
       queryClient.setQueryData(['masters', 'parties', branchId], (old = []) => {
@@ -107,14 +120,206 @@ export function useCreateQuickVehicle(branchId) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ vehicle_no, party_id }) => {
-      const res = await api.post('/masters/vehicles', { vehicle_no, party_id });
-      return res.data;
+      if (navigator.onLine) {
+        const res = await api.post('/masters/vehicles', { vehicle_no, party_id });
+        return res.data;
+      }
+      // Offline fallback: cache locally
+      const localVehicle = {
+        id: `offline_vehicle_${Date.now()}`,
+        branch_id: branchId,
+        vehicle_no: vehicle_no.trim().toUpperCase(),
+        party_id: party_id || null,
+        is_active: true,
+      };
+      const existing = (await getCachedMasters('vehicles', branchId)) || [];
+      await persistMasters('vehicles', branchId, [localVehicle, ...existing]);
+      return localVehicle;
     },
     onSuccess: (newVehicle) => {
       queryClient.setQueryData(['masters', 'vehicles', branchId], (old = []) => {
         return [newVehicle, ...old];
       });
       queryClient.invalidateQueries({ queryKey: ['masters', 'vehicles', branchId] });
+    },
+  });
+}
+
+/**
+ * Quick-create fish type on the fly (used by Staff at weighbridge)
+ */
+export function useCreateQuickFishType(branchId) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ name, default_rate }) => {
+      if (navigator.onLine) {
+        const res = await api.post('/masters/fish-types', { name, default_rate });
+        return res.data;
+      }
+      // Offline fallback: cache locally
+      const localFish = {
+        id: `offline_fish_${Date.now()}`,
+        branch_id: branchId,
+        name: name.trim().toUpperCase(),
+        default_rate: default_rate || 0,
+        is_active: true,
+      };
+      const existing = (await getCachedMasters('fish_types', branchId)) || [];
+      await persistMasters('fish_types', branchId, [localFish, ...existing]);
+      return localFish;
+    },
+    onSuccess: (newFishType) => {
+      queryClient.setQueryData(['masters', 'fish_types', branchId], (old = []) => {
+        return [newFishType, ...old];
+      });
+      queryClient.invalidateQueries({ queryKey: ['masters', 'fish_types', branchId] });
+    },
+  });
+}
+
+/**
+ * Full Master CRUD Mutations for Parties
+ */
+export function useCreateParty(branchId) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload) => {
+      const res = await api.post('/masters/parties', payload);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['masters', 'parties', branchId] });
+    },
+  });
+}
+
+export function useUpdateParty(branchId) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...payload }) => {
+      const res = await api.put(`/masters/parties/${id}`, payload);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['masters', 'parties', branchId] });
+    },
+  });
+}
+
+export function useDeleteParty(branchId) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id) => {
+      const res = await api.delete(`/masters/parties/${id}`);
+      return res;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['masters', 'parties', branchId] });
+      queryClient.invalidateQueries({ queryKey: ['masters', 'vehicles', branchId] });
+    },
+  });
+}
+
+/**
+ * Full Master CRUD Mutations for Vehicles
+ */
+export function useCreateVehicle(branchId) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload) => {
+      const res = await api.post('/masters/vehicles', payload);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['masters', 'vehicles', branchId] });
+    },
+  });
+}
+
+export function useUpdateVehicle(branchId) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...payload }) => {
+      const res = await api.put(`/masters/vehicles/${id}`, payload);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['masters', 'vehicles', branchId] });
+    },
+  });
+}
+
+export function useDeleteVehicle(branchId) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id) => {
+      const res = await api.delete(`/masters/vehicles/${id}`);
+      return res;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['masters', 'vehicles', branchId] });
+    },
+  });
+}
+
+/**
+ * Full Master CRUD Mutations for Fish Types
+ */
+export function useCreateFishType(branchId) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload) => {
+      const res = await api.post('/masters/fish-types', payload);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['masters', 'fish_types', branchId] });
+    },
+  });
+}
+
+export function useUpdateFishType(branchId) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...payload }) => {
+      const res = await api.put(`/masters/fish-types/${id}`, payload);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['masters', 'fish_types', branchId] });
+    },
+  });
+}
+
+export function useDeleteFishType(branchId) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id) => {
+      const res = await api.delete(`/masters/fish-types/${id}`);
+      return res;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['masters', 'fish_types', branchId] });
+    },
+  });
+}
+
+/**
+ * Bulk Data Import Mutation
+ */
+export function useImportMasters(branchId) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ entity, records }) => {
+      const res = await api.post('/masters/import', { entity, records });
+      return res;
+    },
+    onSuccess: (_, variables) => {
+      const queryName = variables.entity === 'fish_types' ? 'fish_types' : variables.entity;
+      queryClient.invalidateQueries({ queryKey: ['masters', queryName, branchId] });
+      if (variables.entity === 'parties') {
+        queryClient.invalidateQueries({ queryKey: ['masters', 'vehicles', branchId] });
+      }
     },
   });
 }

@@ -13,13 +13,21 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { useBranch } from '../context/BranchContext';
-import { useParties, useVehicles, useFishTypes } from '../hooks/useMasters';
+import {
+  useParties,
+  useVehicles,
+  useFishTypes,
+  useCreateQuickParty,
+  useCreateQuickVehicle,
+  useCreateQuickFishType,
+} from '../hooks/useMasters';
 import { api } from '../services/api';
 import { saveOfflineEntry } from '../services/db';
+import { registerBackgroundSync } from '../services/syncManager';
 import NumericKeypad from '../components/common/NumericKeypad';
 
-const FISH_CHIPS = ['CHAMBAN', 'SARDINE', 'KODANDE', 'MURU HEAD', 'GOLAI', 'THONDE', 'AILE', 'DISCO', 'MIX', 'PAMBOL', 'THAKATTE'];
-const RECENT_VEHICLES = ['KL 59Z 5206', 'KA 19D 7628', 'KA 19AE 6136', 'KA 09C 8942'];
+const DEFAULT_FISH_SPECIES = ['CHAMBAN', 'SARDINE', 'KODANDE', 'MURU HEAD', 'GOLAI', 'THONDE', 'AILE', 'DISCO', 'MIX', 'PAMBOL', 'THAKATTE'];
+const DEFAULT_VEHICLES = ['KL 59Z 5206', 'KA 19D 7628', 'KA 19AE 6136', 'KA 09C 8942'];
 
 const getLocalDateString = (d = new Date()) => {
   const year = d.getFullYear();
@@ -32,9 +40,29 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
   const { activeBranchId, activeBranch } = useBranch();
   const queryClient = useQueryClient();
 
-  // Master Data hooks
+  // Master Data hooks (dynamic from PostgreSQL & cached in IndexedDB)
   const { data: partiesList = [], refetch: refetchParties } = useParties(activeBranchId);
   const { data: vehiclesList = [] } = useVehicles(activeBranchId);
+  const { data: fishTypesList = [] } = useFishTypes(activeBranchId);
+
+  // Quick-creation mutations on the fly
+  const createPartyMutation = useCreateQuickParty(activeBranchId);
+  const createFishTypeMutation = useCreateQuickFishType(activeBranchId);
+  const createVehicleMutation = useCreateQuickVehicle(activeBranchId);
+
+  // Dynamic quick-pick fish chips combining DB masters & defaults
+  const dynamicFishChips = useMemo(() => {
+    const fromDb = fishTypesList.map((f) => f.name.toUpperCase());
+    const combined = new Set([...fromDb, ...DEFAULT_FISH_SPECIES]);
+    return Array.from(combined);
+  }, [fishTypesList]);
+
+  // Dynamic quick-pick vehicle chips combining DB masters & defaults
+  const dynamicVehicleChips = useMemo(() => {
+    const fromDb = vehiclesList.map((v) => v.vehicle_no.toUpperCase());
+    const combined = new Set([...fromDb, ...DEFAULT_VEHICLES]);
+    return Array.from(combined).slice(0, 10);
+  }, [vehiclesList]);
 
   // Workflow Step: 'fish' (Step 1: Fish & Remarks) | 'weights' (Step 2: Vehicle & Weights)
   const [step, setStep] = useState('fish');
@@ -51,16 +79,73 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
     return null;
   });
 
-  // Lines: [{ boxes: '64', parts: [{ fish: 'CHAMBAN', pct: '100', c: '20' }] }]
-  const [lines, setLines] = useState(() => {
-    if (editEntry && Array.isArray(editEntry.boxes) && editEntry.boxes.length > 0) {
-      return editEntry.boxes.map((b) => ({
-        boxes: String(b.box_count || 1),
-        parts: [{ fish: b.fish_name, pct: String(b.mix_percentage || 100), c: '' }],
-      }));
+  const parseEntryLines = (entry) => {
+    if (!entry) return [{ boxes: '', parts: [{ fish: 'CHAMBAN', pct: '', c: '' }] }];
+
+    // 1. Try parsing remarks if present (handles grouped fish with counts seamlessly)
+    if (entry.remarks && typeof entry.remarks === 'string') {
+      const lotStrings = entry.remarks.split(',').map((s) => s.trim()).filter(Boolean);
+      const parsedLines = [];
+
+      for (const lotStr of lotStrings) {
+        const boxMatch = lotStr.match(/^(\d+)\s+(.+)$/);
+        if (!boxMatch) continue;
+        const boxCount = boxMatch[1];
+        const partsStr = boxMatch[2];
+        const partItems = partsStr.split('+').map((p) => p.trim()).filter(Boolean);
+
+        const parts = partItems.map((pStr) => {
+          const pctMatch = pStr.match(/(\d+(?:\.\d+)?)\s*%/);
+          const cMatch = pStr.match(/(\d+)\s*C/i);
+
+          let fish = pStr;
+          if (pctMatch) fish = fish.replace(pctMatch[0], '');
+          if (cMatch) fish = fish.replace(cMatch[0], '');
+          fish = fish.trim();
+
+          return {
+            fish: fish,
+            pct: pctMatch ? pctMatch[1] : partItems.length === 1 ? '100' : '',
+            c: cMatch ? cMatch[1] : '',
+          };
+        });
+
+        parsedLines.push({
+          boxes: boxCount,
+          parts,
+        });
+      }
+
+      if (parsedLines.length > 0) {
+        return parsedLines;
+      }
     }
-    return [{ boxes: '', parts: [{ fish: 'CHAMBAN', pct: '100', c: '' }] }];
-  });
+
+    // 2. Fallback: Group by box_group_id if present in entry.boxes
+    if (Array.isArray(entry.boxes) && entry.boxes.length > 0) {
+      const groups = {};
+      entry.boxes.forEach((b, idx) => {
+        const gId = b.box_group_id || `box_${b.box_count}_${idx}`;
+        if (!groups[gId]) {
+          groups[gId] = {
+            boxes: String(b.box_count || ''),
+            parts: [],
+          };
+        }
+        groups[gId].parts.push({
+          fish: b.fish_name,
+          pct: b.mix_percentage ? String(b.mix_percentage) : '',
+          c: b.fish_count ? String(b.fish_count) : '',
+        });
+      });
+      return Object.values(groups);
+    }
+
+    return [{ boxes: '', parts: [{ fish: 'CHAMBAN', pct: '', c: '' }] }];
+  };
+
+  // Lines: [{ boxes: '64', parts: [{ fish: 'CHAMBAN', pct: '100', c: '20' }] }]
+  const [lines, setLines] = useState(() => parseEntryLines(editEntry));
 
   const [mixTargetIndex, setMixTargetIndex] = useState(null);
   const [otherFishInput, setOtherFishInput] = useState('');
@@ -98,10 +183,10 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
     return lines
       .filter((l) => l.boxes && l.parts.length > 0)
       .map((l) => {
-        if (l.parts.length === 1 && parseFloat(l.parts[0].pct) >= 100) {
+        if (l.parts.length === 1 && (!l.parts[0].pct || parseFloat(l.parts[0].pct) >= 100)) {
           return [l.boxes, l.parts[0].fish, l.parts[0].c ? `${l.parts[0].c}C` : ''].filter(Boolean).join(' ');
         }
-        return `${l.boxes} ` + l.parts.map((p) => [p.fish, `${p.pct}%`, p.c ? `${p.c}C` : ''].filter(Boolean).join(' ')).join(' + ');
+        return `${l.boxes} ` + l.parts.map((p) => [p.fish, p.pct ? `${p.pct}%` : '', p.c ? `${p.c}C` : ''].filter(Boolean).join(' ')).join(' + ');
       })
       .join(', ');
   }, [lines]);
@@ -110,30 +195,33 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
   const handleAddFish = (fishName) => {
     if (mixTargetIndex !== null) {
       const targetIdx = mixTargetIndex;
+      const targetLine = lines[targetIdx];
+      const targetTotal = targetLine
+        ? targetLine.parts.reduce((sum, p) => sum + (parseFloat(p.pct) || 0), 0)
+        : 0;
+
+      // If box is already 100%, do not allow adding another fish (Point 1)
+      if (targetTotal >= 100) {
+        setMixTargetIndex(null);
+        return;
+      }
+
       setMixTargetIndex(null);
-      // Mix into target line immutably
+      // Mix into target line immutably - keep pct empty initially (Point 2)
       setLines((prev) =>
         prev.map((line, idx) => {
           if (idx !== targetIdx) return line;
-          const currentParts = line.parts;
-          const updatedParts = currentParts.map((part, pIdx) => {
-            if (pIdx === 0 && currentParts.length === 1 && (part.pct === '100' || !part.pct)) {
-              return { ...part, pct: '50' };
-            }
-            return { ...part };
-          });
-          const newPct = currentParts.length === 1 ? '50' : '0';
           return {
             ...line,
-            parts: [...updatedParts, { fish: fishName, pct: newPct, c: '' }],
+            parts: [...line.parts, { fish: fishName, pct: '', c: '' }],
           };
         })
       );
     } else {
-      // Add as standalone box line immutably
+      // Add as standalone box line immutably - keep pct empty initially (Point 2)
       setLines((prev) => [
         ...prev,
-        { boxes: '', parts: [{ fish: fishName, pct: '100', c: '' }] },
+        { boxes: '', parts: [{ fish: fishName, pct: '', c: '' }] },
       ]);
     }
   };
@@ -196,8 +284,10 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
     return lines.every((l) => {
       const bCount = parseInt(l.boxes, 10);
       if (!(bCount > 0)) return false;
+      // Single species lot can have empty pct (implied 100%) or exact 100%
+      if (l.parts.length === 1 && !l.parts[0].pct) return true;
       const totalPct = l.parts.reduce((sum, p) => sum + (parseFloat(p.pct) || 0), 0);
-      return totalPct === 100;
+      return Math.abs(totalPct - 100) < 0.01;
     });
   }, [partySearch, lines]);
 
@@ -237,15 +327,17 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
     setSubmitting(true);
     setErrorMessage('');
 
-    // Flatten box lot lines for backend schema
+    // Flatten box lot lines for backend schema with box_group_id and fish_count
     const boxesPayload = [];
-    lines.forEach((l) => {
+    lines.forEach((l, lotIdx) => {
       const bCount = parseInt(l.boxes, 10) || 1;
       l.parts.forEach((p) => {
         boxesPayload.push({
           fish_name: p.fish,
           box_count: bCount,
           mix_percentage: parseFloat(p.pct) || 100,
+          fish_count: p.c ? parseInt(p.c, 10) : null,
+          box_group_id: lotIdx + 1,
         });
       });
     });
@@ -263,18 +355,22 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
 
     try {
       if (navigator.onLine) {
-        const res = await api.post('/entries', payload);
+        const res = editEntry
+          ? await api.put(`/entries/${editEntry.id}`, payload)
+          : await api.post('/entries', payload);
         await queryClient.invalidateQueries({ queryKey: ['entries'] });
         if (onEntryCreated) onEntryCreated(res.data);
       } else {
         const offlineEntry = {
           ...payload,
-          tempId: `offline_${Date.now()}`,
+          id: editEntry?.id,
+          tempId: editEntry?.tempId || `offline_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
           branchId: activeBranchId,
           createdAt: new Date().toISOString(),
-          status: 'OFFLINE_PENDING',
+          status: 'QUEUED_SYNC',
         };
         await saveOfflineEntry(offlineEntry);
+        await registerBackgroundSync();
         await queryClient.invalidateQueries({ queryKey: ['entries'] });
         if (onEntryCreated) onEntryCreated(offlineEntry);
       }
@@ -293,11 +389,23 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
       <div className="space-y-4 max-w-xl mx-auto">
         {/* Step Header */}
         <div className="light-card p-4 rounded-2xl flex items-center justify-between">
-          <div>
-            <h2 className="text-base font-black text-slate-900">
-              {editEntry ? 'Edit Intake Slip' : 'New Weighbridge Entry'}
-            </h2>
-            <p className="text-xs text-slate-500">Step 1: Fish &amp; Remarks</p>
+          <div className="flex items-center gap-3">
+            {editEntry && onCancel && (
+              <button
+                type="button"
+                onClick={onCancel}
+                className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:text-slate-900"
+                title="Cancel Edit"
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </button>
+            )}
+            <div>
+              <h2 className="text-base font-black text-slate-900">
+                {editEntry ? 'Edit Intake Slip' : 'New Weighbridge Entry'}
+              </h2>
+              <p className="text-xs text-slate-500">Step 1: Fish &amp; Remarks</p>
+            </div>
           </div>
           <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 border border-amber-200">
             Step 1 of 2
@@ -352,10 +460,19 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
             {partySearch.trim() && !filteredParties.includes(partySearch.trim()) && (
               <button
                 type="button"
-                onClick={() => setPartySearch(partySearch.trim())}
-                className="text-xs font-bold px-3 py-1.5 rounded-xl border border-dashed border-amber-400 bg-amber-50 text-amber-800"
+                disabled={createPartyMutation.isPending}
+                onClick={async () => {
+                  const newName = partySearch.trim();
+                  try {
+                    await createPartyMutation.mutateAsync({ name: newName });
+                  } catch (err) {
+                    console.warn('[Weighbridge] Party quick-creation:', err.message);
+                  }
+                  setPartySearch(newName);
+                }}
+                className="text-xs font-bold px-3 py-1.5 rounded-xl border border-dashed border-amber-400 bg-amber-50 text-amber-800 hover:bg-amber-100 transition-all flex items-center gap-1"
               >
-                + Add "{partySearch.trim()}"
+                <Plus className="w-3.5 h-3.5" /> Add "{partySearch.trim()}" to Masters
               </button>
             )}
           </div>
@@ -385,7 +502,10 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
           <div className="space-y-2">
             {lines.map((line, li) => {
               const totalPct = line.parts.reduce((acc, p) => acc + (parseFloat(p.pct) || 0), 0);
-              const pctWarn = line.parts.length > 1 && totalPct !== 100;
+              const isSingleAuto = line.parts.length === 1 && !line.parts[0].pct;
+              const effectivePct = isSingleAuto ? 100 : totalPct;
+              const isOver = effectivePct > 100;
+              const isComplete = effectivePct === 100;
 
               return (
                 <div key={li} className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
@@ -443,20 +563,39 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
                   ))}
 
                   <div className="flex items-center justify-between pt-1 text-[11px]">
-                    {pctWarn ? (
-                      <span className="text-amber-700 font-bold">
-                        Mix must total 100% (now {totalPct}%)
+                    {isOver ? (
+                      <span className="text-rose-700 font-bold">
+                        ✗ Mix exceeds 100% (currently {totalPct}%)
+                      </span>
+                    ) : isComplete ? (
+                      <span className="text-emerald-700 font-semibold">
+                        ✓ 100% complete
                       </span>
                     ) : (
-                      <span></span>
+                      <span className="text-amber-700 font-bold">
+                        Mix must total 100% (currently {totalPct}%)
+                      </span>
                     )}
-                    <button
-                      type="button"
-                      onClick={() => setMixTargetIndex(mixTargetIndex === li ? null : li)}
-                      className="text-amber-700 hover:text-amber-800 font-semibold underline"
-                    >
-                      {mixTargetIndex === li ? 'Cancel mix' : '+ Mix another fish in this box'}
-                    </button>
+
+                    {effectivePct >= 100 ? (
+                      mixTargetIndex === li ? (
+                        <button
+                          type="button"
+                          onClick={() => setMixTargetIndex(null)}
+                          className="text-slate-500 hover:text-slate-700 font-semibold underline"
+                        >
+                          Cancel mix
+                        </button>
+                      ) : null
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setMixTargetIndex(mixTargetIndex === li ? null : li)}
+                        className="text-amber-700 hover:text-amber-800 font-semibold underline"
+                      >
+                        {mixTargetIndex === li ? 'Cancel mix' : '+ Mix another fish in this box'}
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -476,7 +615,7 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
               Tap to Add Fish
             </div>
             <div className="flex flex-wrap gap-1.5">
-              {FISH_CHIPS.map((chip) => (
+              {dynamicFishChips.map((chip) => (
                 <button
                   key={chip}
                   type="button"
@@ -499,23 +638,30 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
               <div className="flex gap-2 mt-2">
                 <input
                   type="text"
-                  placeholder="Fish name"
+                  placeholder="Fish species name"
                   value={otherFishInput}
                   onChange={(e) => setOtherFishInput(e.target.value.toUpperCase())}
-                  className="flex-1 bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 text-xs font-bold"
+                  className="flex-1 bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-900"
                 />
                 <button
                   type="button"
-                  onClick={() => {
+                  disabled={createFishTypeMutation.isPending || !otherFishInput.trim()}
+                  onClick={async () => {
                     if (otherFishInput.trim()) {
-                      handleAddFish(otherFishInput.trim());
+                      const fishName = otherFishInput.trim().toUpperCase();
+                      try {
+                        await createFishTypeMutation.mutateAsync({ name: fishName });
+                      } catch (err) {
+                        console.warn('[Weighbridge] Fish quick-creation:', err.message);
+                      }
+                      handleAddFish(fishName);
                       setOtherFishInput('');
                       setShowOtherInput(false);
                     }
                   }}
-                  className="px-4 py-1.5 bg-amber-500 text-white rounded-xl text-xs font-bold"
+                  className="px-4 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold shadow-sm disabled:opacity-40"
                 >
-                  Add
+                  {createFishTypeMutation.isPending ? 'Saving...' : 'Add to Catalog'}
                 </button>
               </div>
             )}
@@ -531,6 +677,25 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
             </p>
           </div>
         </div>
+
+        {/* Validation Feedback when Next is blocked */}
+        {!canProceedToWeights && (
+          <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>
+              {!partySearch.trim()
+                ? 'Please select or enter a party / vendor.'
+                : lines.some((l) => !(parseInt(l.boxes, 10) > 0))
+                ? 'Please enter the number of boxes.'
+                : lines.some((l) => {
+                    const total = l.parts.reduce((s, p) => s + (parseFloat(p.pct) || 0), 0);
+                    return total > 100;
+                  })
+                ? 'Box mix percentage cannot exceed 100%.'
+                : 'Every box mix must total exactly 100% before proceeding.'}
+            </span>
+          </div>
+        )}
 
         {/* Step 1 Next Button */}
         <button
@@ -584,36 +749,39 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
 
       {/* Slip No & Vehicle No Input */}
       <div className="light-card p-4 rounded-2xl space-y-3">
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {/* Optional Slip No */}
-          <div
-            onClick={() => setWeightField('slip')}
-            className={`p-2.5 rounded-xl border cursor-pointer ${
-              weightField === 'slip' ? 'bg-amber-50 border-amber-400 ring-2 ring-amber-100' : 'bg-slate-50 border-slate-200'
-            }`}
-          >
-            <span className="text-[10px] font-bold text-slate-400 uppercase block">Slip No</span>
-            <span className="font-mono font-bold text-sm text-slate-800">{slipNo || '—'}</span>
+          <div>
+            <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+              Slip No (Optional)
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. SL-001"
+              value={slipNo}
+              onChange={(e) => setSlipNo(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
+            />
           </div>
 
           {/* Vehicle No */}
-          <div className="col-span-2">
-            <span className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+          <div className="sm:col-span-2">
+            <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
               Vehicle No · Required
-            </span>
+            </label>
             <input
               type="text"
               placeholder="e.g. KL 59Z 5206"
               value={vehicleNo}
               onChange={(e) => setVehicleNo(e.target.value.toUpperCase())}
-              className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm font-mono font-bold uppercase text-slate-900 focus:outline-none focus:border-amber-500"
+              className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm font-mono font-bold uppercase text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
             />
           </div>
         </div>
 
-        {/* Quick Recent Vehicles */}
+        {/* Quick Recent Vehicles from Masters DB */}
         <div className="flex gap-1.5 overflow-x-auto pt-1">
-          {RECENT_VEHICLES.map((v) => (
+          {dynamicVehicleChips.map((v) => (
             <button
               key={v}
               type="button"
@@ -627,60 +795,73 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
               {v}
             </button>
           ))}
+          {vehicleNo.trim() && !dynamicVehicleChips.includes(vehicleNo.trim()) && (
+            <button
+              type="button"
+              disabled={createVehicleMutation.isPending}
+              onClick={async () => {
+                try {
+                  await createVehicleMutation.mutateAsync({ vehicle_no: vehicleNo.trim() });
+                } catch (err) {
+                  console.warn('[Weighbridge] Vehicle quick-creation:', err.message);
+                }
+              }}
+              className="text-[11px] font-mono font-bold px-2.5 py-1 rounded-lg border border-dashed border-amber-400 bg-amber-50 text-amber-800 whitespace-nowrap"
+            >
+              + Save "{vehicleNo.trim()}" to Masters
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Gross, Tare, Ice/Water Cards */}
-      <div className="grid grid-cols-3 gap-2">
+      {/* Gross, Tare, Ice/Water Cards with Direct Keyboard Entry */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {/* Loaded */}
-        <div
-          onClick={() => setWeightField('loaded')}
-          className={`p-3 rounded-2xl border cursor-pointer select-none transition-all touch-key ${
-            weightField === 'loaded'
-              ? 'bg-amber-50 border-amber-400 ring-2 ring-amber-100 shadow-sm'
-              : 'bg-white border-slate-200 hover:border-slate-300'
-          }`}
-        >
-          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-            Loaded (kg)
-          </div>
-          <div className="text-xl font-mono font-black text-slate-900 truncate mt-1">
-            {grossLoaded ? Number(grossLoaded).toLocaleString() : '0'}
-          </div>
+        <div className="light-card p-3.5 rounded-2xl border border-amber-200 bg-amber-50/40 focus-within:ring-2 focus-within:ring-amber-400">
+          <label className="text-[10px] font-bold uppercase tracking-wider text-amber-900 block mb-1">
+            Loaded (kg) *
+          </label>
+          <input
+            type="number"
+            min="0"
+            step="any"
+            placeholder="0"
+            value={grossLoaded}
+            onChange={(e) => setGrossLoaded(e.target.value)}
+            className="w-full text-xl font-mono font-black text-slate-900 bg-white border border-slate-300 rounded-xl px-3 py-2 focus:outline-none focus:border-amber-500"
+          />
         </div>
 
         {/* Empty */}
-        <div
-          onClick={() => setWeightField('empty')}
-          className={`p-3 rounded-2xl border cursor-pointer select-none transition-all touch-key ${
-            weightField === 'empty'
-              ? 'bg-blue-50 border-blue-400 ring-2 ring-blue-100 shadow-sm'
-              : 'bg-white border-slate-200 hover:border-slate-300'
-          }`}
-        >
-          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-            Empty (kg)
-          </div>
-          <div className="text-xl font-mono font-black text-slate-900 truncate mt-1">
-            {emptyTare ? Number(emptyTare).toLocaleString() : '0'}
-          </div>
+        <div className="light-card p-3.5 rounded-2xl border border-blue-200 bg-blue-50/40 focus-within:ring-2 focus-within:ring-blue-400">
+          <label className="text-[10px] font-bold uppercase tracking-wider text-blue-900 block mb-1">
+            Empty Tare (kg) *
+          </label>
+          <input
+            type="number"
+            min="0"
+            step="any"
+            placeholder="0"
+            value={emptyTare}
+            onChange={(e) => setEmptyTare(e.target.value)}
+            className="w-full text-xl font-mono font-black text-slate-900 bg-white border border-slate-300 rounded-xl px-3 py-2 focus:outline-none focus:border-blue-500"
+          />
         </div>
 
         {/* Ice / Water */}
-        <div
-          onClick={() => setWeightField('ice')}
-          className={`p-3 rounded-2xl border cursor-pointer select-none transition-all touch-key ${
-            weightField === 'ice'
-              ? 'bg-slate-100 border-slate-400 ring-2 ring-slate-200 shadow-sm'
-              : 'bg-white border-slate-200 hover:border-slate-300'
-          }`}
-        >
-          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-            Ice / Water
-          </div>
-          <div className="text-xl font-mono font-black text-slate-900 truncate mt-1">
-            {iceWater ? Number(iceWater).toLocaleString() : '0'}
-          </div>
+        <div className="light-card p-3.5 rounded-2xl border border-slate-200 bg-slate-50 focus-within:ring-2 focus-within:ring-slate-400">
+          <label className="text-[10px] font-bold uppercase tracking-wider text-slate-600 block mb-1">
+            Ice / Water Deduction (kg)
+          </label>
+          <input
+            type="number"
+            min="0"
+            step="any"
+            placeholder="0"
+            value={iceWater}
+            onChange={(e) => setIceWater(e.target.value)}
+            className="w-full text-xl font-mono font-black text-slate-900 bg-white border border-slate-300 rounded-xl px-3 py-2 focus:outline-none focus:border-slate-400"
+          />
         </div>
       </div>
 
@@ -721,32 +902,6 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
         </div>
       </div>
 
-      {/* On-screen Keypad */}
-      <div className="light-card p-3 rounded-2xl">
-        <div className="flex items-center justify-between px-2 mb-2">
-          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-            Keypad Field: <strong className="text-slate-800">{weightField.toUpperCase()}</strong>
-          </span>
-          <span className="text-xs font-mono font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-            {getActiveWeightValue() || '0'}
-          </span>
-        </div>
-
-        <NumericKeypad
-          value={getActiveWeightValue()}
-          onChange={handleKeypadInput}
-          onDone={handleKeypadDone}
-          onClear={() => handleKeypadInput('')}
-          allowDecimal={false}
-          quickChips={[
-            { label: '50', value: 50 },
-            { label: '100', value: 100 },
-            { label: '500', value: 500 },
-            { label: '1000', value: 1000 },
-          ]}
-        />
-      </div>
-
       {errorMessage && (
         <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center gap-2">
           <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
@@ -762,7 +917,13 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
         className="touch-key w-full py-4 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-40"
       >
         <CheckCircle2 className="w-4 h-4 stroke-[2.5]" />
-        {submitting ? 'Sending to Admin...' : 'Send to admin for rate →'}
+        {submitting
+          ? editEntry
+            ? 'Saving Changes...'
+            : 'Sending to Admin...'
+          : editEntry
+          ? 'Save Changes →'
+          : 'Send to admin for rate →'}
       </button>
     </div>
   );

@@ -48,8 +48,8 @@ function validateBoxMixPercentages(boxes) {
       };
     }
 
-    if (box.mix_group || box.group_id) {
-      const gKey = box.mix_group || box.group_id;
+    if (box.box_group_id || box.mix_group || box.group_id) {
+      const gKey = box.box_group_id || box.mix_group || box.group_id;
       if (!mixGroups[gKey]) mixGroups[gKey] = [];
       mixGroups[gKey].push(box);
     } else if (mix < 100) {
@@ -98,8 +98,13 @@ function validateBoxMixPercentages(boxes) {
  * @returns {{ averageRate: number, totalEffectiveBoxes: number, weightedSum: number }}
  */
 function calculateWeightedAverageRate(boxes, rates) {
+  const boxRateMap = new Map();
   const rateLookup = new Map();
+
   for (const r of rates) {
+    if (r.box_id) {
+      boxRateMap.set(String(r.box_id), Number(r.rate_per_kg));
+    }
     if (r.fish_type_id) {
       rateLookup.set(`id:${r.fish_type_id}`, Number(r.rate_per_kg));
     }
@@ -117,7 +122,9 @@ function calculateWeightedAverageRate(boxes, rates) {
     const weightFactor = boxCount * (mixPercentage / 100);
 
     let rate = 0;
-    if (box.fish_type_id && rateLookup.has(`id:${box.fish_type_id}`)) {
+    if (box.id && boxRateMap.has(String(box.id))) {
+      rate = boxRateMap.get(String(box.id));
+    } else if (box.fish_type_id && rateLookup.has(`id:${box.fish_type_id}`)) {
       rate = rateLookup.get(`id:${box.fish_type_id}`);
     } else if (box.fish_name && rateLookup.has(`name:${box.fish_name.trim().toUpperCase()}`)) {
       rate = rateLookup.get(`name:${box.fish_name.trim().toUpperCase()}`);

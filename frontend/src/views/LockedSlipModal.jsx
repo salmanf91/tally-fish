@@ -1,8 +1,10 @@
 import React from 'react';
-import { Lock, X } from 'lucide-react';
+import { Lock, AlertTriangle, X } from 'lucide-react';
 
 export default function LockedSlipModal({ entry, onClose }) {
   if (!entry) return null;
+
+  const isHoldReview = entry.status === 'HOLD_REVIEW';
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
@@ -12,14 +14,20 @@ export default function LockedSlipModal({ entry, onClose }) {
           <div>
             <div className="flex items-center gap-2">
               <h3 className="text-base font-bold text-slate-900">
-                Entry #{entry.daily_sl_no}
+                Entry #{entry.daily_sl_no !== '—' ? entry.daily_sl_no : ''}
               </h3>
-              <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
-                <Lock className="w-3 h-3 text-emerald-600" /> Locked
-              </span>
+              {isHoldReview ? (
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-300">
+                  <AlertTriangle className="w-3 h-3 text-amber-600" /> Held for Review
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
+                  <Lock className="w-3 h-3 text-emerald-600" /> Locked
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              {new Date(entry.entry_date).toLocaleDateString()}
+              {entry.entry_date ? new Date(entry.entry_date).toLocaleDateString() : 'Today'}
             </p>
           </div>
           <button
@@ -31,9 +39,16 @@ export default function LockedSlipModal({ entry, onClose }) {
         </div>
 
         {/* Lock Alert Banner */}
-        <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-medium">
-          Rate set by admin, so this entry is locked for staff. Ask admin if something needs changing.
-        </div>
+        {isHoldReview ? (
+          <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-xs font-medium">
+            {entry.lockReason ||
+              'Admin assigned purchase rates while this entry was offline. Edits have been diverted for Admin Review.'}
+          </div>
+        ) : (
+          <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-medium">
+            Rate set by admin, so this entry is locked for staff. Ask admin if something needs changing.
+          </div>
+        )}
 
         {/* Party & Remarks */}
         <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1">

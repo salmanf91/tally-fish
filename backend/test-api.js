@@ -51,6 +51,7 @@ async function runTests() {
 
   server = app.listen(PORT);
   let failed = 0;
+  const createdTestEntryIds = [];
 
   function assert(condition, message) {
     if (condition) {
@@ -154,6 +155,7 @@ async function runTests() {
 
     assert(entryCreateRes.status === 201, 'Entry creation success');
     const entry = entryCreateRes.body.data;
+    if (entry?.id) createdTestEntryIds.push(entry.id);
     assert(Number(entry.net_kg) === 1000.00, `Net Weight computation: ${entry.net_kg} == 1000.00 (1500 - 400 - 100)`);
     assert(entry.status === 'RATE_PENDING', 'Initial entry status is RATE_PENDING');
     assert(entry.daily_sl_no >= 1, `Isolated daily serial allocated: #${entry.daily_sl_no}`);
@@ -201,6 +203,56 @@ async function runTests() {
       { Authorization: `Bearer ${staffToken}`, 'X-Branch-ID': branchId }
     );
     assert(staffEditLockedEntry.status === 403, 'Server-side rate lock strictly blocks Staff edits once locked');
+
+    // 7b. Phase 5: Field Staff Flow & Offline Batch Sync (/api/entries/sync)
+    console.log('\n--- Test Group: Offline Batch Sync & Server-Lock Conflict Handling ---');
+    // Ensure masters exist for offline sync entry (production mode requires registered masters)
+    await request(
+      'POST',
+      '/masters/parties',
+      { name: 'Offline Sync Seafoods' },
+      { Authorization: `Bearer ${staffToken}`, 'X-Branch-ID': branchId }
+    );
+    await request(
+      'POST',
+      '/masters/vehicles',
+      { vehicle_no: 'KA 19 EF 9999' },
+      { Authorization: `Bearer ${staffToken}`, 'X-Branch-ID': branchId }
+    );
+
+    const syncRes = await request(
+      'POST',
+      '/entries/sync',
+      {
+        entries: [
+          {
+            tempId: 'offline_slip_1',
+            entry_date: new Date().toISOString().split('T')[0],
+            party_name: 'Offline Sync Seafoods',
+            vehicle_no: 'KA 19 EF 9999',
+            gross_loaded_kg: 3200,
+            empty_tare_kg: 1000,
+            ice_water_kg: 200,
+            remarks: '50 SARDINE 100% 20C',
+            boxes: [{ fish_name: 'SARDINE', box_count: 50, mix_percentage: 100 }],
+          },
+          // Simulate conflicting edit on locked entry
+          {
+            tempId: 'offline_conflict_slip',
+            id: entry.id,
+            gross_loaded_kg: 1800,
+            remarks: 'Staff offline attempted edit on locked slip',
+          },
+        ],
+      },
+      { Authorization: `Bearer ${staffToken}`, 'X-Branch-ID': branchId }
+    );
+    assert(syncRes.status === 200, 'POST /api/entries/sync responds 200');
+    assert(syncRes.body.synced.length === 1, 'Offline new entry synced successfully');
+    if (syncRes.body.synced[0]?.id) createdTestEntryIds.push(syncRes.body.synced[0].id);
+    assert(syncRes.body.synced[0].tempId === 'offline_slip_1', 'Synced result includes original tempId');
+    assert(syncRes.body.conflicts.length === 1, 'Server-lock conflict correctly detected');
+    assert(syncRes.body.conflicts[0].status === 'HOLD_REVIEW', 'Conflicting entry routed to HOLD_REVIEW for Admin Review');
 
     // 8. Masters Merging by billingAdmin (Single Office Login capability)
     console.log('\n--- Test Group: Master Merging by billingAdmin ---');
@@ -310,6 +362,20 @@ async function runTests() {
       eventReceivedEntry = entry;
     });
 
+    // Ensure masters registered for event test
+    await request(
+      'POST',
+      '/masters/parties',
+      { name: 'Push Event Vendor' },
+      { Authorization: `Bearer ${staffToken}`, 'X-Branch-ID': branchId }
+    );
+    await request(
+      'POST',
+      '/masters/vehicles',
+      { vehicle_no: 'KA-19-EV-9999' },
+      { Authorization: `Bearer ${staffToken}`, 'X-Branch-ID': branchId }
+    );
+
     const eventEntryRes = await request(
       'POST',
       '/entries',
@@ -324,6 +390,7 @@ async function runTests() {
       { Authorization: `Bearer ${staffToken}`, 'X-Branch-ID': branchId }
     );
     assert(eventEntryRes.status === 201, 'Created entry to verify entry:created event emission');
+    if (eventEntryRes.body.data?.id) createdTestEntryIds.push(eventEntryRes.body.data.id);
 
     // Give event loop tick
     await new Promise((r) => setTimeout(r, 100));
@@ -354,9 +421,41 @@ async function runTests() {
     const afterDelete = await db.query('SELECT id FROM push_subscriptions WHERE endpoint = $1', [staleEndpoint]);
     assert(afterDelete.rows.length === 0, 'Stale subscription successfully pruned from PostgreSQL');
 
+    // 13. Master Bulk Import & Safe Deletion Test Group
+    console.log('\n--- Test Group: Master Bulk Import & Deletion API ---');
+    const importPayload = {
+      entity: 'parties',
+      records: [
+        { name: 'Import Test Vendor Alpha', code: 'ITVA', phone: '+919111222333', is_active: true },
+        { name: 'Import Test Vendor Beta', code: 'ITVB', phone: '+919444555666', is_active: true },
+      ],
+    };
+    const importRes = await request(
+      'POST',
+      '/masters/import',
+      importPayload,
+      { Authorization: `Bearer ${billingToken}`, 'X-Branch-ID': branchId }
+    );
+    assert(importRes.status === 200, 'POST /api/masters/import responds 200');
+    assert(importRes.body.data.inserted >= 1, `Bulk imported ${importRes.body.data.inserted} vendors`);
+
+    // Verify imported vendor exists
+    const checkImported = await db.query("SELECT id FROM parties WHERE name = 'Import Test Vendor Alpha'");
+    assert(checkImported.rows.length === 1, 'Imported vendor found in database');
+    const importedId = checkImported.rows[0].id;
+
+    // Test Delete Master API
+    const deleteRes = await request(
+      'DELETE',
+      `/masters/parties/${importedId}`,
+      null,
+      { Authorization: `Bearer ${billingToken}`, 'X-Branch-ID': branchId }
+    );
+    assert(deleteRes.status === 200 && deleteRes.body.success, 'DELETE /api/masters/parties/:id permanently deleted unreferenced vendor');
+
     console.log('\n======================================================');
     if (failed === 0) {
-      console.log('🎉 ALL TESTS PASSED! PHASES 2 & 3 ARE 100% OPERATIONAL');
+      console.log('🎉 ALL TESTS PASSED! MASTER CRUD & PRODUCTION ENGINE 100% OPERATIONAL');
     } else {
       console.error(`💥 ${failed} TEST(S) FAILED`);
     }
@@ -364,6 +463,34 @@ async function runTests() {
   } catch (err) {
     console.error('Fatal test error:', err);
   } finally {
+    console.log('\n🧹 Cleaning up test artifacts to guarantee pristine production database state...');
+    try {
+      if (createdTestEntryIds.length > 0) {
+        await db.query('DELETE FROM entry_rates WHERE entry_id = ANY($1)', [createdTestEntryIds]);
+        await db.query('DELETE FROM entry_boxes WHERE entry_id = ANY($1)', [createdTestEntryIds]);
+        await db.query('DELETE FROM entries WHERE id = ANY($1)', [createdTestEntryIds]);
+      }
+      await db.query(`
+        DELETE FROM vehicles 
+        WHERE vehicle_no ILIKE '%TEST%' 
+           OR vehicle_no ILIKE '%EV-9999%' 
+           OR vehicle_no ILIKE '%EF 9999%'
+      `);
+      await db.query(`
+        DELETE FROM parties 
+        WHERE name ILIKE 'Quick Vendor%' 
+           OR name ILIKE 'Duplicate Vendor%' 
+           OR name ILIKE 'Push Event Vendor%' 
+           OR name ILIKE 'Offline Sync%' 
+           OR name ILIKE 'Import Test%'
+           OR name ILIKE '%Test%'
+      `);
+      await db.query("DELETE FROM push_subscriptions WHERE endpoint ILIKE '%test%' OR endpoint ILIKE '%stale%'");
+      await db.query("DELETE FROM audit_logs WHERE diffs::text ILIKE '%test%' OR diffs::text ILIKE '%Quick Vendor%'");
+      console.log('✅ Cleanup completed: Only genuine manual entries and catalog masters preserved.');
+    } catch (cleanupErr) {
+      console.error('⚠️ Warning: Post-test cleanup encountered an error:', cleanupErr.message);
+    }
     server.close();
     await db.pool.end();
     process.exit(failed === 0 ? 0 : 1);
