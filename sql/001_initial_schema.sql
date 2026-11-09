@@ -194,6 +194,8 @@ CREATE TABLE IF NOT EXISTS entry_boxes (
     fish_name VARCHAR(100) NOT NULL,
     box_count INTEGER NOT NULL CHECK (box_count >= 0),
     mix_percentage NUMERIC(5, 2) NOT NULL DEFAULT 100.00 CHECK (mix_percentage > 0 AND mix_percentage <= 100.00),
+    fish_count INTEGER,
+    box_group_id INTEGER DEFAULT 1,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

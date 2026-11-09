@@ -79,16 +79,73 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
     return null;
   });
 
-  // Lines: [{ boxes: '64', parts: [{ fish: 'CHAMBAN', pct: '100', c: '20' }] }]
-  const [lines, setLines] = useState(() => {
-    if (editEntry && Array.isArray(editEntry.boxes) && editEntry.boxes.length > 0) {
-      return editEntry.boxes.map((b) => ({
-        boxes: String(b.box_count || ''),
-        parts: [{ fish: b.fish_name, pct: b.mix_percentage ? String(b.mix_percentage) : '', c: '' }],
-      }));
+  const parseEntryLines = (entry) => {
+    if (!entry) return [{ boxes: '', parts: [{ fish: 'CHAMBAN', pct: '', c: '' }] }];
+
+    // 1. Try parsing remarks if present (handles grouped fish with counts seamlessly)
+    if (entry.remarks && typeof entry.remarks === 'string') {
+      const lotStrings = entry.remarks.split(',').map((s) => s.trim()).filter(Boolean);
+      const parsedLines = [];
+
+      for (const lotStr of lotStrings) {
+        const boxMatch = lotStr.match(/^(\d+)\s+(.+)$/);
+        if (!boxMatch) continue;
+        const boxCount = boxMatch[1];
+        const partsStr = boxMatch[2];
+        const partItems = partsStr.split('+').map((p) => p.trim()).filter(Boolean);
+
+        const parts = partItems.map((pStr) => {
+          const pctMatch = pStr.match(/(\d+(?:\.\d+)?)\s*%/);
+          const cMatch = pStr.match(/(\d+)\s*C/i);
+
+          let fish = pStr;
+          if (pctMatch) fish = fish.replace(pctMatch[0], '');
+          if (cMatch) fish = fish.replace(cMatch[0], '');
+          fish = fish.trim();
+
+          return {
+            fish: fish,
+            pct: pctMatch ? pctMatch[1] : partItems.length === 1 ? '100' : '',
+            c: cMatch ? cMatch[1] : '',
+          };
+        });
+
+        parsedLines.push({
+          boxes: boxCount,
+          parts,
+        });
+      }
+
+      if (parsedLines.length > 0) {
+        return parsedLines;
+      }
     }
+
+    // 2. Fallback: Group by box_group_id if present in entry.boxes
+    if (Array.isArray(entry.boxes) && entry.boxes.length > 0) {
+      const groups = {};
+      entry.boxes.forEach((b, idx) => {
+        const gId = b.box_group_id || `box_${b.box_count}_${idx}`;
+        if (!groups[gId]) {
+          groups[gId] = {
+            boxes: String(b.box_count || ''),
+            parts: [],
+          };
+        }
+        groups[gId].parts.push({
+          fish: b.fish_name,
+          pct: b.mix_percentage ? String(b.mix_percentage) : '',
+          c: b.fish_count ? String(b.fish_count) : '',
+        });
+      });
+      return Object.values(groups);
+    }
+
     return [{ boxes: '', parts: [{ fish: 'CHAMBAN', pct: '', c: '' }] }];
-  });
+  };
+
+  // Lines: [{ boxes: '64', parts: [{ fish: 'CHAMBAN', pct: '100', c: '20' }] }]
+  const [lines, setLines] = useState(() => parseEntryLines(editEntry));
 
   const [mixTargetIndex, setMixTargetIndex] = useState(null);
   const [otherFishInput, setOtherFishInput] = useState('');
@@ -268,15 +325,17 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
     setSubmitting(true);
     setErrorMessage('');
 
-    // Flatten box lot lines for backend schema
+    // Flatten box lot lines for backend schema with box_group_id and fish_count
     const boxesPayload = [];
-    lines.forEach((l) => {
+    lines.forEach((l, lotIdx) => {
       const bCount = parseInt(l.boxes, 10) || 1;
       l.parts.forEach((p) => {
         boxesPayload.push({
           fish_name: p.fish,
           box_count: bCount,
           mix_percentage: parseFloat(p.pct) || 100,
+          fish_count: p.c ? parseInt(p.c, 10) : null,
+          box_group_id: lotIdx + 1,
         });
       });
     });
@@ -294,13 +353,16 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
 
     try {
       if (navigator.onLine) {
-        const res = await api.post('/entries', payload);
+        const res = editEntry
+          ? await api.put(`/entries/${editEntry.id}`, payload)
+          : await api.post('/entries', payload);
         await queryClient.invalidateQueries({ queryKey: ['entries'] });
         if (onEntryCreated) onEntryCreated(res.data);
       } else {
         const offlineEntry = {
           ...payload,
-          tempId: `offline_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          id: editEntry?.id,
+          tempId: editEntry?.tempId || `offline_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
           branchId: activeBranchId,
           createdAt: new Date().toISOString(),
           status: 'QUEUED_SYNC',
@@ -325,11 +387,23 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
       <div className="space-y-4 max-w-xl mx-auto">
         {/* Step Header */}
         <div className="light-card p-4 rounded-2xl flex items-center justify-between">
-          <div>
-            <h2 className="text-base font-black text-slate-900">
-              {editEntry ? 'Edit Intake Slip' : 'New Weighbridge Entry'}
-            </h2>
-            <p className="text-xs text-slate-500">Step 1: Fish &amp; Remarks</p>
+          <div className="flex items-center gap-3">
+            {editEntry && onCancel && (
+              <button
+                type="button"
+                onClick={onCancel}
+                className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:text-slate-900"
+                title="Cancel Edit"
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </button>
+            )}
+            <div>
+              <h2 className="text-base font-black text-slate-900">
+                {editEntry ? 'Edit Intake Slip' : 'New Weighbridge Entry'}
+              </h2>
+              <p className="text-xs text-slate-500">Step 1: Fish &amp; Remarks</p>
+            </div>
           </div>
           <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 border border-amber-200">
             Step 1 of 2
@@ -817,7 +891,13 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
         className="touch-key w-full py-4 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-40"
       >
         <CheckCircle2 className="w-4 h-4 stroke-[2.5]" />
-        {submitting ? 'Sending to Admin...' : 'Send to admin for rate →'}
+        {submitting
+          ? editEntry
+            ? 'Saving Changes...'
+            : 'Sending to Admin...'
+          : editEntry
+          ? 'Save Changes →'
+          : 'Send to admin for rate →'}
       </button>
     </div>
   );

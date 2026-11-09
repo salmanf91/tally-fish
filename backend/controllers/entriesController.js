@@ -163,6 +163,8 @@ async function createEntry(req, res, next) {
           fish_name: fName,
           box_count: parseInt(box.box_count, 10),
           mix_percentage: parseFloat(box.mix_percentage) || 100.00,
+          fish_count: box.fish_count !== undefined && box.fish_count !== null && box.fish_count !== '' ? parseInt(box.fish_count, 10) : null,
+          box_group_id: box.box_group_id ? parseInt(box.box_group_id, 10) : 1,
         });
       }
 
@@ -225,9 +227,9 @@ async function createEntry(req, res, next) {
         const boxRes = await client.query(
           `
           INSERT INTO entry_boxes (
-            id, entry_id, fish_type_id, fish_name, box_count, mix_percentage
+            id, entry_id, fish_type_id, fish_name, box_count, mix_percentage, fish_count, box_group_id
           ) VALUES (
-            gen_random_uuid(), $1, $2, $3, $4, $5
+            gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7
           ) RETURNING *;
           `,
           [
@@ -236,6 +238,8 @@ async function createEntry(req, res, next) {
             box.fish_name,
             box.box_count,
             box.mix_percentage,
+            box.fish_count,
+            box.box_group_id,
           ]
         );
         savedBoxes.push(boxRes.rows[0]);
@@ -298,7 +302,9 @@ async function getEntries(req, res, next) {
                'fish_type_id', eb.fish_type_id,
                'fish_name', eb.fish_name,
                'box_count', eb.box_count,
-               'mix_percentage', eb.mix_percentage
+               'mix_percentage', eb.mix_percentage,
+               'fish_count', eb.fish_count,
+               'box_group_id', eb.box_group_id
              )) FILTER (WHERE eb.id IS NOT NULL), '[]') as boxes
     `;
 
@@ -573,8 +579,8 @@ async function updateEntry(req, res, next) {
         for (const box of boxes) {
           const boxRes = await client.query(
             `
-            INSERT INTO entry_boxes (id, entry_id, fish_type_id, fish_name, box_count, mix_percentage)
-            VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)
+            INSERT INTO entry_boxes (id, entry_id, fish_type_id, fish_name, box_count, mix_percentage, fish_count, box_group_id)
+            VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7)
             RETURNING *;
             `,
             [
@@ -583,6 +589,8 @@ async function updateEntry(req, res, next) {
               box.fish_name ? box.fish_name.trim().toUpperCase() : 'FISH',
               parseInt(box.box_count, 10),
               parseFloat(box.mix_percentage) || 100.00,
+              box.fish_count !== undefined && box.fish_count !== null && box.fish_count !== '' ? parseInt(box.fish_count, 10) : null,
+              box.box_group_id ? parseInt(box.box_group_id, 10) : 1,
             ]
           );
           savedBoxes.push(boxRes.rows[0]);
@@ -845,11 +853,19 @@ async function syncEntries(req, res, next) {
           for (const box of validatedBoxes) {
             const bRes = await client.query(
               `
-              INSERT INTO entry_boxes (id, entry_id, fish_type_id, fish_name, box_count, mix_percentage)
-              VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)
+              INSERT INTO entry_boxes (id, entry_id, fish_type_id, fish_name, box_count, mix_percentage, fish_count, box_group_id)
+              VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7)
               RETURNING *;
               `,
-              [createdEntry.id, box.fish_type_id, box.fish_name, box.box_count, box.mix_percentage]
+              [
+                createdEntry.id,
+                box.fish_type_id,
+                box.fish_name,
+                box.box_count,
+                box.mix_percentage,
+                box.fish_count !== undefined && box.fish_count !== null && box.fish_count !== '' ? parseInt(box.fish_count, 10) : null,
+                box.box_group_id ? parseInt(box.box_group_id, 10) : 1,
+              ]
             );
             savedBoxes.push(bRes.rows[0]);
           }
