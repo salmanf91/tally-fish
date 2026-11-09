@@ -30,6 +30,13 @@ router.put(
   mastersController.updateParty
 );
 
+// Delete / Deactivate party
+router.delete(
+  '/parties/:id',
+  requireBranchRole(['billingAdmin', 'owner']),
+  mastersController.deleteParty
+);
+
 // Full merging (billingAdmin and owner)
 router.post(
   '/parties/merge',
@@ -59,6 +66,13 @@ router.put(
   '/vehicles/:id',
   requireBranchRole(['billingAdmin', 'owner']),
   mastersController.updateVehicle
+);
+
+// Delete / Deactivate vehicle
+router.delete(
+  '/vehicles/:id',
+  requireBranchRole(['billingAdmin', 'owner']),
+  mastersController.deleteVehicle
 );
 
 // Full merging
@@ -92,11 +106,27 @@ router.put(
   mastersController.updateFishType
 );
 
+// Delete / Deactivate fish type
+router.delete(
+  '/fish-types/:id',
+  requireBranchRole(['billingAdmin', 'owner']),
+  mastersController.deleteFishType
+);
+
 // Full merging
 router.post(
   '/fish-types/merge',
   requireBranchRole(['billingAdmin', 'owner']),
   mastersController.mergeFishTypes
+);
+
+// =============================================================================
+// BULK DATA IMPORT (/api/masters/import)
+// =============================================================================
+router.post(
+  '/import',
+  requireBranchRole(['billingAdmin', 'owner']),
+  mastersController.importMasters
 );
 
 module.exports = router;

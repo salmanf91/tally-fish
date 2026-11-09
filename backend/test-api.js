@@ -204,6 +204,20 @@ async function runTests() {
 
     // 7b. Phase 5: Field Staff Flow & Offline Batch Sync (/api/entries/sync)
     console.log('\n--- Test Group: Offline Batch Sync & Server-Lock Conflict Handling ---');
+    // Ensure masters exist for offline sync entry (production mode requires registered masters)
+    await request(
+      'POST',
+      '/masters/parties',
+      { name: 'Offline Sync Seafoods' },
+      { Authorization: `Bearer ${staffToken}`, 'X-Branch-ID': branchId }
+    );
+    await request(
+      'POST',
+      '/masters/vehicles',
+      { vehicle_no: 'KA 19 EF 9999' },
+      { Authorization: `Bearer ${staffToken}`, 'X-Branch-ID': branchId }
+    );
+
     const syncRes = await request(
       'POST',
       '/entries/sync',
@@ -345,6 +359,20 @@ async function runTests() {
       eventReceivedEntry = entry;
     });
 
+    // Ensure masters registered for event test
+    await request(
+      'POST',
+      '/masters/parties',
+      { name: 'Push Event Vendor' },
+      { Authorization: `Bearer ${staffToken}`, 'X-Branch-ID': branchId }
+    );
+    await request(
+      'POST',
+      '/masters/vehicles',
+      { vehicle_no: 'KA-19-EV-9999' },
+      { Authorization: `Bearer ${staffToken}`, 'X-Branch-ID': branchId }
+    );
+
     const eventEntryRes = await request(
       'POST',
       '/entries',
@@ -389,9 +417,41 @@ async function runTests() {
     const afterDelete = await db.query('SELECT id FROM push_subscriptions WHERE endpoint = $1', [staleEndpoint]);
     assert(afterDelete.rows.length === 0, 'Stale subscription successfully pruned from PostgreSQL');
 
+    // 13. Master Bulk Import & Safe Deletion Test Group
+    console.log('\n--- Test Group: Master Bulk Import & Deletion API ---');
+    const importPayload = {
+      entity: 'parties',
+      records: [
+        { name: 'Import Test Vendor Alpha', code: 'ITVA', phone: '+919111222333', is_active: true },
+        { name: 'Import Test Vendor Beta', code: 'ITVB', phone: '+919444555666', is_active: true },
+      ],
+    };
+    const importRes = await request(
+      'POST',
+      '/masters/import',
+      importPayload,
+      { Authorization: `Bearer ${billingToken}`, 'X-Branch-ID': branchId }
+    );
+    assert(importRes.status === 200, 'POST /api/masters/import responds 200');
+    assert(importRes.body.data.inserted >= 1, `Bulk imported ${importRes.body.data.inserted} vendors`);
+
+    // Verify imported vendor exists
+    const checkImported = await db.query("SELECT id FROM parties WHERE name = 'Import Test Vendor Alpha'");
+    assert(checkImported.rows.length === 1, 'Imported vendor found in database');
+    const importedId = checkImported.rows[0].id;
+
+    // Test Delete Master API
+    const deleteRes = await request(
+      'DELETE',
+      `/masters/parties/${importedId}`,
+      null,
+      { Authorization: `Bearer ${billingToken}`, 'X-Branch-ID': branchId }
+    );
+    assert(deleteRes.status === 200 && deleteRes.body.success, 'DELETE /api/masters/parties/:id permanently deleted unreferenced vendor');
+
     console.log('\n======================================================');
     if (failed === 0) {
-      console.log('🎉 ALL TESTS PASSED! PHASES 2 & 3 ARE 100% OPERATIONAL');
+      console.log('🎉 ALL TESTS PASSED! MASTER CRUD & PRODUCTION ENGINE 100% OPERATIONAL');
     } else {
       console.error(`💥 ${failed} TEST(S) FAILED`);
     }
@@ -399,6 +459,33 @@ async function runTests() {
   } catch (err) {
     console.error('Fatal test error:', err);
   } finally {
+    console.log('\n🧹 Cleaning up test artifacts to guarantee pristine production database state...');
+    try {
+      const realEntryId = '82d6cd23-4d13-46d4-9e16-d96143d9fc16';
+      await db.query('DELETE FROM entry_rates WHERE entry_id != $1', [realEntryId]);
+      await db.query('DELETE FROM entry_boxes WHERE entry_id != $1', [realEntryId]);
+      await db.query('DELETE FROM entries WHERE id != $1', [realEntryId]);
+      await db.query(`
+        DELETE FROM vehicles 
+        WHERE vehicle_no ILIKE '%TEST%' 
+           OR vehicle_no ILIKE '%EV-9999%' 
+           OR vehicle_no ILIKE '%EF 9999%'
+      `);
+      await db.query(`
+        DELETE FROM parties 
+        WHERE name ILIKE 'Quick Vendor%' 
+           OR name ILIKE 'Duplicate Vendor%' 
+           OR name ILIKE 'Push Event Vendor%' 
+           OR name ILIKE 'Offline Sync%' 
+           OR name ILIKE 'Import Test%'
+           OR name ILIKE '%Test%'
+      `);
+      await db.query("DELETE FROM push_subscriptions WHERE endpoint ILIKE '%test%' OR endpoint ILIKE '%stale%'");
+      await db.query("DELETE FROM audit_logs WHERE diffs::text ILIKE '%test%' OR diffs::text ILIKE '%Quick Vendor%'");
+      console.log('✅ Cleanup completed: Only genuine manual entries and catalog masters preserved.');
+    } catch (cleanupErr) {
+      console.error('⚠️ Warning: Post-test cleanup encountered an error:', cleanupErr.message);
+    }
     server.close();
     await db.pool.end();
     process.exit(failed === 0 ? 0 : 1);

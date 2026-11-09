@@ -94,13 +94,7 @@ async function createEntry(req, res, next) {
           resolvedPartyId = partyLookup.rows[0].id;
           resolvedPartyName = partyLookup.rows[0].name;
         } else {
-          // Quick create by staff
-          const newParty = await client.query(
-            'INSERT INTO parties (id, branch_id, name, is_active) VALUES (gen_random_uuid(), $1, $2, true) RETURNING id, name',
-            [branchId, resolvedPartyName]
-          );
-          resolvedPartyId = newParty.rows[0].id;
-          resolvedPartyName = newParty.rows[0].name;
+          throw new Error(`Party "${resolvedPartyName}" not found in masters. Please select a registered vendor or create it via Master Data.`);
         }
       } else {
         throw new Error('Either party_id or party_name must be provided');
@@ -128,12 +122,7 @@ async function createEntry(req, res, next) {
           resolvedVehicleId = vehicleLookup.rows[0].id;
           resolvedVehicleNo = vehicleLookup.rows[0].vehicle_no;
         } else {
-          const newVeh = await client.query(
-            'INSERT INTO vehicles (id, branch_id, vehicle_no, party_id, is_active) VALUES (gen_random_uuid(), $1, $2, $3, true) RETURNING id, vehicle_no',
-            [branchId, resolvedVehicleNo, resolvedPartyId]
-          );
-          resolvedVehicleId = newVeh.rows[0].id;
-          resolvedVehicleNo = newVeh.rows[0].vehicle_no;
+          throw new Error(`Vehicle "${resolvedVehicleNo}" not found in masters. Please register the vehicle via Master Data.`);
         }
       } else {
         throw new Error('Either vehicle_id or vehicle_no must be provided');
@@ -163,12 +152,7 @@ async function createEntry(req, res, next) {
             fId = fishLookup.rows[0].id;
             fName = fishLookup.rows[0].name;
           } else {
-            const newFish = await client.query(
-              'INSERT INTO fish_types (id, branch_id, name, is_active) VALUES (gen_random_uuid(), $1, $2, true) RETURNING id, name',
-              [branchId, fName]
-            );
-            fId = newFish.rows[0].id;
-            fName = newFish.rows[0].name;
+            throw new Error(`Fish species "${fName}" not found in catalog. Please select a registered species or add it via Master Data.`);
           }
         } else {
           throw new Error('Fish specification requires fish_type_id or fish_name');
@@ -748,12 +732,7 @@ async function syncEntries(req, res, next) {
               resolvedPartyId = pLookup.rows[0].id;
               resolvedPartyName = pLookup.rows[0].name;
             } else {
-              const newP = await client.query(
-                'INSERT INTO parties (id, branch_id, name, is_active) VALUES (gen_random_uuid(), $1, $2, true) RETURNING id, name',
-                [branchId, resolvedPartyName]
-              );
-              resolvedPartyId = newP.rows[0].id;
-              resolvedPartyName = newP.rows[0].name;
+              throw new Error(`Party "${resolvedPartyName}" not found in masters.`);
             }
           }
 
@@ -776,12 +755,7 @@ async function syncEntries(req, res, next) {
               resolvedVehicleId = vLookup.rows[0].id;
               resolvedVehicleNo = vLookup.rows[0].vehicle_no;
             } else {
-              const newV = await client.query(
-                'INSERT INTO vehicles (id, branch_id, vehicle_no, party_id, is_active) VALUES (gen_random_uuid(), $1, $2, $3, true) RETURNING id, vehicle_no',
-                [branchId, resolvedVehicleNo, resolvedPartyId]
-              );
-              resolvedVehicleId = newV.rows[0].id;
-              resolvedVehicleNo = newV.rows[0].vehicle_no;
+              throw new Error(`Vehicle "${resolvedVehicleNo}" not found in masters.`);
             }
           }
 
@@ -806,12 +780,7 @@ async function syncEntries(req, res, next) {
                 fId = fLookup.rows[0].id;
                 fName = fLookup.rows[0].name;
               } else {
-                const newF = await client.query(
-                  'INSERT INTO fish_types (id, branch_id, name, is_active) VALUES (gen_random_uuid(), $1, $2, true) RETURNING id, name',
-                  [branchId, fName]
-                );
-                fId = newF.rows[0].id;
-                fName = newF.rows[0].name;
+                throw new Error(`Fish species "${fName}" not found in masters.`);
               }
             }
 

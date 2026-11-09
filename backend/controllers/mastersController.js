@@ -741,23 +741,429 @@ async function mergeFishTypes(req, res, next) {
   }
 }
 
+// =============================================================================
+// DELETE / DEACTIVATE CONTROLLERS (Safe Master Deletion)
+// =============================================================================
+
+/**
+ * DELETE /api/masters/parties/:id
+ * If party is referenced by entries or vehicles, deactivates it (soft-delete).
+ * If unreferenced, permanently removes the row.
+ */
+async function deleteParty(req, res, next) {
+  try {
+    const { id } = req.params;
+
+    const existingRes = await db.query('SELECT * FROM parties WHERE id = $1', [id]);
+    if (existingRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Party not found' });
+    }
+    const party = existingRes.rows[0];
+
+    // Check transaction and vehicle references
+    const [entryCheck, vehicleCheck] = await Promise.all([
+      db.query('SELECT 1 FROM entries WHERE party_id = $1 LIMIT 1', [id]),
+      db.query('SELECT 1 FROM vehicles WHERE party_id = $1 LIMIT 1', [id]),
+    ]);
+
+    const isReferenced = entryCheck.rows.length > 0 || vehicleCheck.rows.length > 0;
+
+    let resultParty;
+
+    if (isReferenced) {
+      // Soft-delete to preserve ledger integrity
+      const updateRes = await db.query(
+        'UPDATE parties SET is_active = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING *',
+        [id]
+      );
+      resultParty = updateRes.rows[0];
+
+      await recordAuditLog({
+        actorId: req.user.id,
+        branchId: req.branchId,
+        action: 'MASTER_PARTY_DEACTIVATED',
+        entityType: 'parties',
+        entityId: id,
+        diffs: { old: party, new: resultParty, reason: 'Referenced by existing transactions' },
+        ipAddress: req.ip,
+      });
+
+      return res.status(200).json({
+        success: true,
+        deactivated: true,
+        message: `Vendor "${party.name}" has transaction history and was deactivated instead of deleted to protect ledger integrity.`,
+        data: resultParty,
+      });
+    } else {
+      // Permanent deletion
+      const deleteRes = await db.query('DELETE FROM parties WHERE id = $1 RETURNING *', [id]);
+      resultParty = deleteRes.rows[0];
+
+      await recordAuditLog({
+        actorId: req.user.id,
+        branchId: req.branchId,
+        action: 'MASTER_PARTY_DELETED',
+        entityType: 'parties',
+        entityId: id,
+        diffs: { deleted: party },
+        ipAddress: req.ip,
+      });
+
+      return res.status(200).json({
+        success: true,
+        deleted: true,
+        message: `Vendor "${party.name}" permanently deleted.`,
+        data: resultParty,
+      });
+    }
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * DELETE /api/masters/vehicles/:id
+ * If vehicle is referenced by entries, deactivates it. Otherwise deletes permanently.
+ */
+async function deleteVehicle(req, res, next) {
+  try {
+    const { id } = req.params;
+
+    const existingRes = await db.query('SELECT * FROM vehicles WHERE id = $1', [id]);
+    if (existingRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Vehicle not found' });
+    }
+    const vehicle = existingRes.rows[0];
+
+    const entryCheck = await db.query('SELECT 1 FROM entries WHERE vehicle_id = $1 LIMIT 1', [id]);
+    const isReferenced = entryCheck.rows.length > 0;
+
+    if (isReferenced) {
+      const updateRes = await db.query(
+        'UPDATE vehicles SET is_active = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING *',
+        [id]
+      );
+      const resultVeh = updateRes.rows[0];
+
+      await recordAuditLog({
+        actorId: req.user.id,
+        branchId: req.branchId,
+        action: 'MASTER_VEHICLE_DEACTIVATED',
+        entityType: 'vehicles',
+        entityId: id,
+        diffs: { old: vehicle, new: resultVeh, reason: 'Referenced by existing weighbridge entries' },
+        ipAddress: req.ip,
+      });
+
+      return res.status(200).json({
+        success: true,
+        deactivated: true,
+        message: `Vehicle "${vehicle.vehicle_no}" has weighbridge slips and was deactivated to preserve logs.`,
+        data: resultVeh,
+      });
+    } else {
+      const deleteRes = await db.query('DELETE FROM vehicles WHERE id = $1 RETURNING *', [id]);
+      const resultVeh = deleteRes.rows[0];
+
+      await recordAuditLog({
+        actorId: req.user.id,
+        branchId: req.branchId,
+        action: 'MASTER_VEHICLE_DELETED',
+        entityType: 'vehicles',
+        entityId: id,
+        diffs: { deleted: vehicle },
+        ipAddress: req.ip,
+      });
+
+      return res.status(200).json({
+        success: true,
+        deleted: true,
+        message: `Vehicle "${vehicle.vehicle_no}" permanently deleted.`,
+        data: resultVeh,
+      });
+    }
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * DELETE /api/masters/fish-types/:id
+ * If fish type is referenced by boxes or rates, deactivates it. Otherwise deletes permanently.
+ */
+async function deleteFishType(req, res, next) {
+  try {
+    const { id } = req.params;
+
+    const existingRes = await db.query('SELECT * FROM fish_types WHERE id = $1', [id]);
+    if (existingRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Fish type not found' });
+    }
+    const fish = existingRes.rows[0];
+
+    const [boxCheck, rateCheck] = await Promise.all([
+      db.query('SELECT 1 FROM entry_boxes WHERE fish_type_id = $1 LIMIT 1', [id]),
+      db.query('SELECT 1 FROM entry_rates WHERE fish_type_id = $1 LIMIT 1', [id]),
+    ]);
+
+    const isReferenced = boxCheck.rows.length > 0 || rateCheck.rows.length > 0;
+
+    if (isReferenced) {
+      const updateRes = await db.query(
+        'UPDATE fish_types SET is_active = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING *',
+        [id]
+      );
+      const resultFish = updateRes.rows[0];
+
+      await recordAuditLog({
+        actorId: req.user.id,
+        branchId: req.branchId,
+        action: 'MASTER_FISH_TYPE_DEACTIVATED',
+        entityType: 'fish_types',
+        entityId: id,
+        diffs: { old: fish, new: resultFish, reason: 'Referenced in box breakdowns or rate history' },
+        ipAddress: req.ip,
+      });
+
+      return res.status(200).json({
+        success: true,
+        deactivated: true,
+        message: `Fish species "${fish.name}" has historical records and was deactivated.`,
+        data: resultFish,
+      });
+    } else {
+      const deleteRes = await db.query('DELETE FROM fish_types WHERE id = $1 RETURNING *', [id]);
+      const resultFish = deleteRes.rows[0];
+
+      await recordAuditLog({
+        actorId: req.user.id,
+        branchId: req.branchId,
+        action: 'MASTER_FISH_TYPE_DELETED',
+        entityType: 'fish_types',
+        entityId: id,
+        diffs: { deleted: fish },
+        ipAddress: req.ip,
+      });
+
+      return res.status(200).json({
+        success: true,
+        deleted: true,
+        message: `Fish species "${fish.name}" permanently deleted.`,
+        data: resultFish,
+      });
+    }
+  } catch (err) {
+    next(err);
+  }
+}
+
+// =============================================================================
+// BULK DATA IMPORT CONTROLLER
+// =============================================================================
+
+/**
+ * POST /api/masters/import
+ * Bulk import master records with duplicate detection, validation, and audit logging.
+ * Body: { entity: 'parties' | 'vehicles' | 'fish_types', records: Array }
+ */
+async function importMasters(req, res, next) {
+  try {
+    const { entity, records } = req.body;
+    const branchId = req.branchId;
+
+    if (!['parties', 'vehicles', 'fish_types'].includes(entity)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid entity. Allowed entities: "parties", "vehicles", "fish_types"',
+      });
+    }
+
+    if (!Array.isArray(records) || records.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'records must be a non-empty array of objects',
+      });
+    }
+
+    const importSummary = await db.withTransaction(async (client) => {
+      let importedCount = 0;
+      let updatedCount = 0;
+      const errors = [];
+
+      if (entity === 'parties') {
+        for (let i = 0; i < records.length; i++) {
+          const rec = records[i];
+          const name = rec.name ? String(rec.name).trim() : '';
+          const code = rec.code ? String(rec.code).trim().toUpperCase() : null;
+          const phone = rec.phone ? String(rec.phone).trim() : null;
+          const isActive = rec.is_active !== undefined ? Boolean(rec.is_active) : true;
+
+          if (!name) {
+            errors.push({ row: i + 1, error: 'Vendor name is required' });
+            continue;
+          }
+
+          const upsertRes = await client.query(
+            `
+            INSERT INTO parties (id, branch_id, name, code, phone, is_active)
+            VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)
+            ON CONFLICT (branch_id, name) DO UPDATE SET
+              code = COALESCE(EXCLUDED.code, parties.code),
+              phone = COALESCE(EXCLUDED.phone, parties.phone),
+              is_active = EXCLUDED.is_active,
+              updated_at = CURRENT_TIMESTAMP
+            RETURNING (xmax = 0) AS is_inserted
+            `,
+            [branchId, name, code, phone, isActive]
+          );
+
+          if (upsertRes.rows[0].is_inserted) {
+            importedCount++;
+          } else {
+            updatedCount++;
+          }
+        }
+      } else if (entity === 'vehicles') {
+        for (let i = 0; i < records.length; i++) {
+          const rec = records[i];
+          const vehicleNo = rec.vehicle_no ? String(rec.vehicle_no).trim().toUpperCase() : '';
+          const partyName = rec.party_name ? String(rec.party_name).trim() : null;
+          let partyId = rec.party_id || null;
+          const notes = rec.notes ? String(rec.notes).trim() : null;
+          const isActive = rec.is_active !== undefined ? Boolean(rec.is_active) : true;
+
+          if (!vehicleNo) {
+            errors.push({ row: i + 1, error: 'Vehicle number is required' });
+            continue;
+          }
+
+          // Resolve party_name to party_id if provided
+          if (!partyId && partyName) {
+            const pRes = await client.query(
+              'SELECT id FROM parties WHERE LOWER(name) = LOWER($1) AND (branch_id = $2 OR branch_id IS NULL) LIMIT 1',
+              [partyName, branchId]
+            );
+            if (pRes.rows.length > 0) {
+              partyId = pRes.rows[0].id;
+            }
+          }
+
+          const upsertRes = await client.query(
+            `
+            INSERT INTO vehicles (id, branch_id, vehicle_no, party_id, notes, is_active)
+            VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)
+            ON CONFLICT (branch_id, vehicle_no) DO UPDATE SET
+              party_id = COALESCE(EXCLUDED.party_id, vehicles.party_id),
+              notes = COALESCE(EXCLUDED.notes, vehicles.notes),
+              is_active = EXCLUDED.is_active,
+              updated_at = CURRENT_TIMESTAMP
+            RETURNING (xmax = 0) AS is_inserted
+            `,
+            [branchId, vehicleNo, partyId, notes, isActive]
+          );
+
+          if (upsertRes.rows[0].is_inserted) {
+            importedCount++;
+          } else {
+            updatedCount++;
+          }
+        }
+      } else if (entity === 'fish_types') {
+        for (let i = 0; i < records.length; i++) {
+          const rec = records[i];
+          const name = rec.name ? String(rec.name).trim().toUpperCase() : '';
+          const code = rec.code ? String(rec.code).trim().toUpperCase() : null;
+          const rateVal = parseFloat(rec.default_rate);
+          const defaultRate = !isNaN(rateVal) && rateVal >= 0 ? rateVal : 0.00;
+          const isActive = rec.is_active !== undefined ? Boolean(rec.is_active) : true;
+
+          if (!name) {
+            errors.push({ row: i + 1, error: 'Fish species name is required' });
+            continue;
+          }
+
+          const upsertRes = await client.query(
+            `
+            INSERT INTO fish_types (id, branch_id, name, code, default_rate, is_active)
+            VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)
+            ON CONFLICT (branch_id, name) DO UPDATE SET
+              code = COALESCE(EXCLUDED.code, fish_types.code),
+              default_rate = CASE WHEN EXCLUDED.default_rate > 0 THEN EXCLUDED.default_rate ELSE fish_types.default_rate END,
+              is_active = EXCLUDED.is_active,
+              updated_at = CURRENT_TIMESTAMP
+            RETURNING (xmax = 0) AS is_inserted
+            `,
+            [branchId, name, code, defaultRate, isActive]
+          );
+
+          if (upsertRes.rows[0].is_inserted) {
+            importedCount++;
+          } else {
+            updatedCount++;
+          }
+        }
+      }
+
+      await recordAuditLog(
+        {
+          actorId: req.user.id,
+          branchId: req.branchId,
+          action: 'MASTER_DATA_IMPORTED',
+          entityType: entity,
+          diffs: {
+            entity,
+            totalRows: records.length,
+            inserted: importedCount,
+            updated: updatedCount,
+            errorsCount: errors.length,
+          },
+          ipAddress: req.ip,
+        },
+        client
+      );
+
+      return { importedCount, updatedCount, errors };
+    }, { actorId: req.user.id, branchId: req.branchId });
+
+    return res.status(200).json({
+      success: true,
+      message: `Master import finished: ${importSummary.importedCount} new created, ${importSummary.updatedCount} existing updated.`,
+      data: {
+        entity,
+        total: records.length,
+        inserted: importSummary.importedCount,
+        updated: importSummary.updatedCount,
+        errors: importSummary.errors,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   // Parties
   listParties,
   createParty,
   updateParty,
+  deleteParty,
   mergeParties,
 
   // Vehicles
   listVehicles,
   createVehicle,
   updateVehicle,
+  deleteVehicle,
   mergeVehicles,
 
   // Fish Types
   listFishTypes,
   createFishType,
   updateFishType,
+  deleteFishType,
   mergeFishTypes,
+
+  // Bulk Import
+  importMasters,
 };
 
