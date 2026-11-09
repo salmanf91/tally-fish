@@ -24,7 +24,6 @@ import {
 import { api } from '../services/api';
 import { saveOfflineEntry } from '../services/db';
 import { registerBackgroundSync } from '../services/syncManager';
-import NumericKeypad from '../components/common/NumericKeypad';
 
 const DEFAULT_FISH_SPECIES = ['CHAMBAN', 'SARDINE', 'KODANDE', 'MURU HEAD', 'GOLAI', 'THONDE', 'AILE', 'DISCO', 'MIX', 'PAMBOL', 'THAKATTE'];
 const DEFAULT_VEHICLES = ['KL 59Z 5206', 'KA 19D 7628', 'KA 19AE 6136', 'KA 09C 8942'];
@@ -157,7 +156,6 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
   const [grossLoaded, setGrossLoaded] = useState(() => String(editEntry?.gross_loaded_kg || ''));
   const [emptyTare, setEmptyTare] = useState(() => String(editEntry?.empty_tare_kg || ''));
   const [iceWater, setIceWater] = useState(() => String(editEntry?.ice_water_kg || '0'));
-  const [weightField, setWeightField] = useState('loaded'); // 'slip' | 'loaded' | 'empty' | 'ice'
 
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -291,28 +289,6 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
     });
   }, [partySearch, lines]);
 
-  // Keypad handler for Step 2
-  const handleKeypadInput = (val) => {
-    if (weightField === 'slip') setSlipNo(val);
-    else if (weightField === 'loaded') setGrossLoaded(val);
-    else if (weightField === 'empty') setEmptyTare(val);
-    else if (weightField === 'ice') setIceWater(val);
-  };
-
-  const getActiveWeightValue = () => {
-    if (weightField === 'slip') return slipNo;
-    if (weightField === 'loaded') return grossLoaded;
-    if (weightField === 'empty') return emptyTare;
-    if (weightField === 'ice') return iceWater;
-    return '';
-  };
-
-  const handleKeypadDone = () => {
-    if (weightField === 'slip') setWeightField('loaded');
-    else if (weightField === 'loaded') setWeightField('empty');
-    else if (weightField === 'empty') setWeightField('ice');
-  };
-
   // Submit Weighbridge Entry
   const handleSaveAndSend = async () => {
     if (!vehicleNo.trim()) {
@@ -432,6 +408,7 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
           </label>
           <input
             type="text"
+            maxLength={100}
             placeholder="Search or type vendor name"
             value={partySearch}
             onChange={(e) => setPartySearch(e.target.value.toUpperCase())}
@@ -520,6 +497,7 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
                         <input
                           type="text"
                           inputMode="numeric"
+                          maxLength={5}
                           placeholder="0"
                           value={line.boxes}
                           onChange={(e) => handleUpdateBoxCount(li, e.target.value)}
@@ -535,6 +513,7 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
                       <input
                         type="text"
                         inputMode="numeric"
+                        maxLength={3}
                         placeholder="%"
                         value={part.pct}
                         onChange={(e) => handleUpdatePartPct(li, pi, e.target.value)}
@@ -545,6 +524,7 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
                       <input
                         type="text"
                         inputMode="numeric"
+                        maxLength={5}
                         placeholder="0"
                         value={part.c}
                         onChange={(e) => handleUpdatePartCount(li, pi, e.target.value)}
@@ -757,6 +737,7 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
             </label>
             <input
               type="text"
+              maxLength={30}
               placeholder="e.g. SL-001"
               value={slipNo}
               onChange={(e) => setSlipNo(e.target.value)}
@@ -771,6 +752,7 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
             </label>
             <input
               type="text"
+              maxLength={30}
               placeholder="e.g. KL 59Z 5206"
               value={vehicleNo}
               onChange={(e) => setVehicleNo(e.target.value.toUpperCase())}
@@ -825,6 +807,7 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
             type="number"
             min="0"
             step="any"
+            maxLength={10}
             placeholder="0"
             value={grossLoaded}
             onChange={(e) => setGrossLoaded(e.target.value)}
@@ -841,6 +824,7 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
             type="number"
             min="0"
             step="any"
+            maxLength={10}
             placeholder="0"
             value={emptyTare}
             onChange={(e) => setEmptyTare(e.target.value)}
@@ -857,6 +841,7 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
             type="number"
             min="0"
             step="any"
+            maxLength={10}
             placeholder="0"
             value={iceWater}
             onChange={(e) => setIceWater(e.target.value)}
@@ -867,10 +852,10 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
 
       {/* Calculated Net Weight Card */}
       <div
-        className={`p-4 rounded-2xl border ${
+        className={`p-4 rounded-2xl border transition-all ${
           weightsValid
             ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
-            : loadedVal > 0 && emptyVal > 0 && emptyVal >= loadedVal
+            : (emptyVal >= loadedVal && loadedVal > 0) || (loadedVal > 0 && emptyVal > 0 && netWeight < 0)
             ? 'bg-rose-50 border-rose-300 text-rose-900'
             : 'bg-slate-100 border-slate-200 text-slate-700'
         }`}
@@ -885,7 +870,9 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
             </div>
           </div>
           <div className="text-right">
-            <span className="font-mono font-black text-2xl">{weightsValid ? Number(netWeight).toLocaleString() : '0'}</span>
+            <span className="font-mono font-black text-2xl">
+              {loadedVal > 0 || emptyVal > 0 ? Number(netWeight).toLocaleString() : '0'}
+            </span>
             <span className="text-xs font-semibold ml-1">kg</span>
           </div>
         </div>
@@ -893,9 +880,11 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
         {/* Validation message */}
         <div className="text-[11px] font-semibold mt-2 pt-2 border-t border-slate-200/50">
           {emptyVal >= loadedVal && loadedVal > 0 ? (
-            <span className="text-rose-700">✗ Empty weight cannot be greater than or equal to loaded weight</span>
+            <span className="text-rose-700">✗ Empty tare cannot be greater than or equal to loaded weight</span>
+          ) : loadedVal > 0 && emptyVal > 0 && netWeight < 0 ? (
+            <span className="text-rose-700">✗ Net weight cannot be negative (ice deduction exceeds payload)</span>
           ) : weightsValid ? (
-            <span className="text-emerald-700">✓ Empty is less than loaded</span>
+            <span className="text-emerald-700">✓ Valid net weight: {Number(netWeight).toLocaleString()} kg</span>
           ) : (
             <span>Enter loaded and empty weights</span>
           )}

@@ -71,3 +71,4 @@ module.exports = {
   ALLOWED_MIME_TYPES,
   ALLOWED_EXTENSIONS,
 };
+
