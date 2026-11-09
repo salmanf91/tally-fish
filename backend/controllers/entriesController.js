@@ -307,6 +307,7 @@ async function getEntries(req, res, next) {
       sql += `,
         COALESCE(json_agg(DISTINCT jsonb_build_object(
           'id', er.id,
+          'box_id', er.box_id,
           'fish_type_id', er.fish_type_id,
           'fish_name', er.fish_name,
           'rate_per_kg', er.rate_per_kg,

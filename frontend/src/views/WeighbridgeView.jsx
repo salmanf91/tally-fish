@@ -83,11 +83,11 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
   const [lines, setLines] = useState(() => {
     if (editEntry && Array.isArray(editEntry.boxes) && editEntry.boxes.length > 0) {
       return editEntry.boxes.map((b) => ({
-        boxes: String(b.box_count || 1),
-        parts: [{ fish: b.fish_name, pct: String(b.mix_percentage || 100), c: '' }],
+        boxes: String(b.box_count || ''),
+        parts: [{ fish: b.fish_name, pct: b.mix_percentage ? String(b.mix_percentage) : '', c: '' }],
       }));
     }
-    return [{ boxes: '', parts: [{ fish: 'CHAMBAN', pct: '100', c: '' }] }];
+    return [{ boxes: '', parts: [{ fish: 'CHAMBAN', pct: '', c: '' }] }];
   });
 
   const [mixTargetIndex, setMixTargetIndex] = useState(null);
@@ -126,10 +126,10 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
     return lines
       .filter((l) => l.boxes && l.parts.length > 0)
       .map((l) => {
-        if (l.parts.length === 1 && parseFloat(l.parts[0].pct) >= 100) {
+        if (l.parts.length === 1 && (!l.parts[0].pct || parseFloat(l.parts[0].pct) >= 100)) {
           return [l.boxes, l.parts[0].fish, l.parts[0].c ? `${l.parts[0].c}C` : ''].filter(Boolean).join(' ');
         }
-        return `${l.boxes} ` + l.parts.map((p) => [p.fish, `${p.pct}%`, p.c ? `${p.c}C` : ''].filter(Boolean).join(' ')).join(' + ');
+        return `${l.boxes} ` + l.parts.map((p) => [p.fish, p.pct ? `${p.pct}%` : '', p.c ? `${p.c}C` : ''].filter(Boolean).join(' ')).join(' + ');
       })
       .join(', ');
   }, [lines]);
@@ -138,30 +138,33 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
   const handleAddFish = (fishName) => {
     if (mixTargetIndex !== null) {
       const targetIdx = mixTargetIndex;
+      const targetLine = lines[targetIdx];
+      const targetTotal = targetLine
+        ? targetLine.parts.reduce((sum, p) => sum + (parseFloat(p.pct) || 0), 0)
+        : 0;
+
+      // If box is already 100%, do not allow adding another fish (Point 1)
+      if (targetTotal >= 100) {
+        setMixTargetIndex(null);
+        return;
+      }
+
       setMixTargetIndex(null);
-      // Mix into target line immutably
+      // Mix into target line immutably - keep pct empty initially (Point 2)
       setLines((prev) =>
         prev.map((line, idx) => {
           if (idx !== targetIdx) return line;
-          const currentParts = line.parts;
-          const updatedParts = currentParts.map((part, pIdx) => {
-            if (pIdx === 0 && currentParts.length === 1 && (part.pct === '100' || !part.pct)) {
-              return { ...part, pct: '50' };
-            }
-            return { ...part };
-          });
-          const newPct = currentParts.length === 1 ? '50' : '0';
           return {
             ...line,
-            parts: [...updatedParts, { fish: fishName, pct: newPct, c: '' }],
+            parts: [...line.parts, { fish: fishName, pct: '', c: '' }],
           };
         })
       );
     } else {
-      // Add as standalone box line immutably
+      // Add as standalone box line immutably - keep pct empty initially (Point 2)
       setLines((prev) => [
         ...prev,
-        { boxes: '', parts: [{ fish: fishName, pct: '100', c: '' }] },
+        { boxes: '', parts: [{ fish: fishName, pct: '', c: '' }] },
       ]);
     }
   };
@@ -485,16 +488,33 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
                       <span className="text-amber-700 font-bold">
                         Mix must total 100% (now {totalPct}%)
                       </span>
+                    ) : totalPct >= 100 ? (
+                      <span className="text-emerald-700 font-semibold">
+                        ✓ 100% complete
+                      </span>
                     ) : (
                       <span></span>
                     )}
-                    <button
-                      type="button"
-                      onClick={() => setMixTargetIndex(mixTargetIndex === li ? null : li)}
-                      className="text-amber-700 hover:text-amber-800 font-semibold underline"
-                    >
-                      {mixTargetIndex === li ? 'Cancel mix' : '+ Mix another fish in this box'}
-                    </button>
+
+                    {totalPct >= 100 ? (
+                      mixTargetIndex === li ? (
+                        <button
+                          type="button"
+                          onClick={() => setMixTargetIndex(null)}
+                          className="text-slate-500 hover:text-slate-700 font-semibold underline"
+                        >
+                          Cancel mix
+                        </button>
+                      ) : null
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setMixTargetIndex(mixTargetIndex === li ? null : li)}
+                        className="text-amber-700 hover:text-amber-800 font-semibold underline"
+                      >
+                        {mixTargetIndex === li ? 'Cancel mix' : '+ Mix another fish in this box'}
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -629,29 +649,32 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
 
       {/* Slip No & Vehicle No Input */}
       <div className="light-card p-4 rounded-2xl space-y-3">
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {/* Optional Slip No */}
-          <div
-            onClick={() => setWeightField('slip')}
-            className={`p-2.5 rounded-xl border cursor-pointer ${
-              weightField === 'slip' ? 'bg-amber-50 border-amber-400 ring-2 ring-amber-100' : 'bg-slate-50 border-slate-200'
-            }`}
-          >
-            <span className="text-[10px] font-bold text-slate-400 uppercase block">Slip No</span>
-            <span className="font-mono font-bold text-sm text-slate-800">{slipNo || '—'}</span>
+          <div>
+            <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+              Slip No (Optional)
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. SL-001"
+              value={slipNo}
+              onChange={(e) => setSlipNo(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
+            />
           </div>
 
           {/* Vehicle No */}
-          <div className="col-span-2">
-            <span className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+          <div className="sm:col-span-2">
+            <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
               Vehicle No · Required
-            </span>
+            </label>
             <input
               type="text"
               placeholder="e.g. KL 59Z 5206"
               value={vehicleNo}
               onChange={(e) => setVehicleNo(e.target.value.toUpperCase())}
-              className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm font-mono font-bold uppercase text-slate-900 focus:outline-none focus:border-amber-500"
+              className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm font-mono font-bold uppercase text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
             />
           </div>
         </div>
@@ -691,57 +714,54 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
         </div>
       </div>
 
-      {/* Gross, Tare, Ice/Water Cards */}
-      <div className="grid grid-cols-3 gap-2">
+      {/* Gross, Tare, Ice/Water Cards with Direct Keyboard Entry */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {/* Loaded */}
-        <div
-          onClick={() => setWeightField('loaded')}
-          className={`p-3 rounded-2xl border cursor-pointer select-none transition-all touch-key ${
-            weightField === 'loaded'
-              ? 'bg-amber-50 border-amber-400 ring-2 ring-amber-100 shadow-sm'
-              : 'bg-white border-slate-200 hover:border-slate-300'
-          }`}
-        >
-          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-            Loaded (kg)
-          </div>
-          <div className="text-xl font-mono font-black text-slate-900 truncate mt-1">
-            {grossLoaded ? Number(grossLoaded).toLocaleString() : '0'}
-          </div>
+        <div className="light-card p-3.5 rounded-2xl border border-amber-200 bg-amber-50/40 focus-within:ring-2 focus-within:ring-amber-400">
+          <label className="text-[10px] font-bold uppercase tracking-wider text-amber-900 block mb-1">
+            Loaded (kg) *
+          </label>
+          <input
+            type="number"
+            min="0"
+            step="any"
+            placeholder="0"
+            value={grossLoaded}
+            onChange={(e) => setGrossLoaded(e.target.value)}
+            className="w-full text-xl font-mono font-black text-slate-900 bg-white border border-slate-300 rounded-xl px-3 py-2 focus:outline-none focus:border-amber-500"
+          />
         </div>
 
         {/* Empty */}
-        <div
-          onClick={() => setWeightField('empty')}
-          className={`p-3 rounded-2xl border cursor-pointer select-none transition-all touch-key ${
-            weightField === 'empty'
-              ? 'bg-blue-50 border-blue-400 ring-2 ring-blue-100 shadow-sm'
-              : 'bg-white border-slate-200 hover:border-slate-300'
-          }`}
-        >
-          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-            Empty (kg)
-          </div>
-          <div className="text-xl font-mono font-black text-slate-900 truncate mt-1">
-            {emptyTare ? Number(emptyTare).toLocaleString() : '0'}
-          </div>
+        <div className="light-card p-3.5 rounded-2xl border border-blue-200 bg-blue-50/40 focus-within:ring-2 focus-within:ring-blue-400">
+          <label className="text-[10px] font-bold uppercase tracking-wider text-blue-900 block mb-1">
+            Empty Tare (kg) *
+          </label>
+          <input
+            type="number"
+            min="0"
+            step="any"
+            placeholder="0"
+            value={emptyTare}
+            onChange={(e) => setEmptyTare(e.target.value)}
+            className="w-full text-xl font-mono font-black text-slate-900 bg-white border border-slate-300 rounded-xl px-3 py-2 focus:outline-none focus:border-blue-500"
+          />
         </div>
 
         {/* Ice / Water */}
-        <div
-          onClick={() => setWeightField('ice')}
-          className={`p-3 rounded-2xl border cursor-pointer select-none transition-all touch-key ${
-            weightField === 'ice'
-              ? 'bg-slate-100 border-slate-400 ring-2 ring-slate-200 shadow-sm'
-              : 'bg-white border-slate-200 hover:border-slate-300'
-          }`}
-        >
-          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-            Ice / Water
-          </div>
-          <div className="text-xl font-mono font-black text-slate-900 truncate mt-1">
-            {iceWater ? Number(iceWater).toLocaleString() : '0'}
-          </div>
+        <div className="light-card p-3.5 rounded-2xl border border-slate-200 bg-slate-50 focus-within:ring-2 focus-within:ring-slate-400">
+          <label className="text-[10px] font-bold uppercase tracking-wider text-slate-600 block mb-1">
+            Ice / Water Deduction (kg)
+          </label>
+          <input
+            type="number"
+            min="0"
+            step="any"
+            placeholder="0"
+            value={iceWater}
+            onChange={(e) => setIceWater(e.target.value)}
+            className="w-full text-xl font-mono font-black text-slate-900 bg-white border border-slate-300 rounded-xl px-3 py-2 focus:outline-none focus:border-slate-400"
+          />
         </div>
       </div>
 
@@ -780,32 +800,6 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
             <span>Enter loaded and empty weights</span>
           )}
         </div>
-      </div>
-
-      {/* On-screen Keypad */}
-      <div className="light-card p-3 rounded-2xl">
-        <div className="flex items-center justify-between px-2 mb-2">
-          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-            Keypad Field: <strong className="text-slate-800">{weightField.toUpperCase()}</strong>
-          </span>
-          <span className="text-xs font-mono font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-            {getActiveWeightValue() || '0'}
-          </span>
-        </div>
-
-        <NumericKeypad
-          value={getActiveWeightValue()}
-          onChange={handleKeypadInput}
-          onDone={handleKeypadDone}
-          onClear={() => handleKeypadInput('')}
-          allowDecimal={false}
-          quickChips={[
-            { label: '50', value: 50 },
-            { label: '100', value: 100 },
-            { label: '500', value: 500 },
-            { label: '1000', value: 1000 },
-          ]}
-        />
       </div>
 
       {errorMessage && (

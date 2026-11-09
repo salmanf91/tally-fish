@@ -9,6 +9,10 @@ import {
   Send,
   X,
   AlertCircle,
+  Download,
+  Printer,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { useBranch } from '../context/BranchContext';
 import { useAuth } from '../context/AuthContext';
@@ -117,18 +121,40 @@ export default function StatementView({ onNavigateToRates }) {
     }
   };
 
-  // WhatsApp Message generation
+  // WhatsApp / Share Message generation
   const whatsappMessage = useMemo(() => {
-    if (!shareParty) return '';
-    const partyEntries = allEntries.filter(
-      (e) => e.party_name === shareParty && e.entry_date?.split('T')[0] === toDate
-    );
-    let msg = `Indo Fish Meal & Oil Co. Pvt. Ltd.\nDaily rate statement · ${toDate}\nParty: ${shareParty}\n\n`;
+    const isSingleDay = fromDate === toDate;
+    const dateRangeLabel = isSingleDay ? fromDate : `${fromDate} to ${toDate}`;
+
+    if (!shareParty) {
+      let msg = `Indo Fish Meal & Oil Co. Pvt. Ltd.\nProcurement Statement · ${dateRangeLabel}\nBranch: ${activeBranch?.branch_name || 'Ullal'}\n\n`;
+      let totalNet = 0;
+      filteredEntries.forEach((e, idx) => {
+        totalNet += parseFloat(e.net_kg) || 0;
+        msg += `${idx + 1}) ${e.party_name} · ${e.vehicle_no || 'No Vehicle'} · ${Number(e.net_kg).toLocaleString()} kg\n`;
+        msg += `   ${e.remarks || 'Raw catch'}`;
+        if (e.rates && e.rates.length > 0) {
+          msg += ` → ${e.rates.map((r) => `${r.fish_name} ₹${r.rate_per_kg}`).join(', ')}`;
+        } else {
+          msg += ` → Rate Pending`;
+        }
+        msg += '\n\n';
+      });
+      msg += `Total slips: ${filteredEntries.length}\nTotal net: ${Number(totalNet).toLocaleString()} kg\nFormat: ${shareFormat}`;
+      return msg;
+    }
+
+    const partyEntries = allEntries.filter((e) => {
+      const d = e.entry_date ? e.entry_date.split('T')[0] : '';
+      return e.party_name === shareParty && d >= fromDate && d <= toDate;
+    });
+
+    let msg = `Indo Fish Meal & Oil Co. Pvt. Ltd.\nDaily rate statement · ${dateRangeLabel}\nParty: ${shareParty}\n\n`;
     let partyTotalNet = 0;
 
     partyEntries.forEach((e, idx) => {
       partyTotalNet += parseFloat(e.net_kg) || 0;
-      msg += `${idx + 1}) ${e.vehicle_no} · ${Number(e.net_kg).toLocaleString()} kg\n`;
+      msg += `${idx + 1}) ${e.vehicle_no || 'No Vehicle'} · ${Number(e.net_kg).toLocaleString()} kg\n`;
       msg += `   ${e.remarks || 'Raw catch'}`;
       if (e.rates && e.rates.length > 0) {
         msg += ` → ₹${e.rates.map((r) => `${r.fish_name} ₹${r.rate_per_kg}`).join(', ')}`;
@@ -140,7 +166,7 @@ export default function StatementView({ onNavigateToRates }) {
 
     msg += `Total net: ${Number(partyTotalNet).toLocaleString()} kg\nReport attached (${shareFormat}).`;
     return msg;
-  }, [shareParty, toDate, allEntries, shareFormat]);
+  }, [shareParty, fromDate, toDate, allEntries, filteredEntries, shareFormat, activeBranch]);
 
   const handleOpenShare = () => {
     const defaultParty = selectedParty || partiesInEntries[0] || '';
@@ -154,8 +180,390 @@ export default function StatementView({ onNavigateToRates }) {
     const url = `https://wa.me/${cleanedPhone}?text=${encodeURIComponent(whatsappMessage)}`;
     window.open(url, '_blank');
     setShareModalOpen(false);
-    setToastMessage(`WhatsApp opened for ${shareParty}`);
+    setToastMessage(`WhatsApp opened for ${shareParty || 'all clients'}`);
     setTimeout(() => setToastMessage(''), 4000);
+  };
+
+  const handleCopySummary = async () => {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(whatsappMessage);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = whatsappMessage;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
+      setToastMessage('Summary copied to clipboard');
+      setTimeout(() => setToastMessage(''), 3000);
+    } catch (err) {
+      console.warn('Copy error:', err);
+      setToastMessage('Failed to copy to clipboard');
+      setTimeout(() => setToastMessage(''), 3000);
+    }
+  };
+
+  const handleShare = async () => {
+    if (filteredEntries.length === 0) {
+      setToastMessage('No entries to share');
+      setTimeout(() => setToastMessage(''), 3000);
+      return;
+    }
+
+    const branchName = activeBranch?.branch_name || 'Ullal';
+    const dateRangeLabel = fromDate === toDate ? fromDate : `${fromDate} to ${toDate}`;
+    const title = `Daily Procurement Statement - ${branchName} (${dateRangeLabel})`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title,
+          text: whatsappMessage,
+        });
+        setToastMessage('Statement shared successfully');
+        setTimeout(() => setToastMessage(''), 3000);
+        return;
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          console.warn('[Statement] navigator.share error:', err);
+        }
+      }
+    }
+
+    handleOpenShare();
+  };
+
+  const handleExportExcel = () => {
+    if (filteredEntries.length === 0) {
+      setToastMessage('No entries to export for selected dates/filters');
+      setTimeout(() => setToastMessage(''), 3000);
+      return;
+    }
+
+    const headers = [
+      'SL No',
+      'Date',
+      'Slip No',
+      'Party Name',
+      'Vehicle No',
+      'Gross Loaded (kg)',
+      'Empty Tare (kg)',
+      'Ice Deduction (kg)',
+      'Net Weight (kg)',
+      'Remarks / Box Mix',
+      'Rate Details (₹/kg)',
+      'Total Amount (₹)',
+      'Status',
+    ];
+
+    const escapeCSV = (val) => {
+      if (val === null || val === undefined) return '""';
+      const str = String(val).replace(/"/g, '""');
+      return `"${str}"`;
+    };
+
+    const rows = filteredEntries.map((e, idx) => {
+      const rateDetails =
+        e.rates && e.rates.length > 0
+          ? e.rates.map((r) => `${r.fish_name}: ₹${r.rate_per_kg}`).join('; ')
+          : e.status === 'RATE_PENDING'
+          ? 'Rate Pending'
+          : '—';
+
+      const dateStr = e.entry_date ? e.entry_date.split('T')[0] : '';
+      const totalAmt = e.total_amount ? Number(e.total_amount).toFixed(2) : '';
+
+      return [
+        idx + 1,
+        escapeCSV(dateStr),
+        escapeCSV(e.slip_no || `SL-${e.daily_sl_no || idx + 1}`),
+        escapeCSV(e.party_name),
+        escapeCSV(e.vehicle_no || ''),
+        parseFloat(e.gross_loaded_kg) || 0,
+        parseFloat(e.empty_tare_kg) || 0,
+        parseFloat(e.ice_water_kg) || 0,
+        parseFloat(e.net_kg) || 0,
+        escapeCSV(e.remarks || ''),
+        escapeCSV(rateDetails),
+        totalAmt,
+        escapeCSV(e.status || ''),
+      ].join(',');
+    });
+
+    const totalGross = filteredEntries.reduce((s, e) => s + (parseFloat(e.gross_loaded_kg) || 0), 0);
+    const totalTare = filteredEntries.reduce((s, e) => s + (parseFloat(e.empty_tare_kg) || 0), 0);
+    const totalIce = filteredEntries.reduce((s, e) => s + (parseFloat(e.ice_water_kg) || 0), 0);
+    const totalNet = filteredEntries.reduce((s, e) => s + (parseFloat(e.net_kg) || 0), 0);
+    const grandAmount = filteredEntries.reduce((s, e) => s + (parseFloat(e.total_amount) || 0), 0);
+
+    const totalsRow = [
+      'TOTAL',
+      '',
+      '',
+      '',
+      '',
+      totalGross,
+      totalTare,
+      totalIce,
+      totalNet,
+      '',
+      '',
+      grandAmount > 0 ? grandAmount.toFixed(2) : '',
+      '',
+    ].join(',');
+
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows, totalsRow].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    const branchCode = (activeBranch?.branch_code || 'BRANCH').toUpperCase();
+    link.setAttribute('download', `TallyFish_${branchCode}_Statement_${fromDate}_to_${toDate}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    setToastMessage(`Exported ${filteredEntries.length} slips to Excel/CSV`);
+    setTimeout(() => setToastMessage(''), 3000);
+  };
+
+  const handleExportPDF = () => {
+    if (filteredEntries.length === 0) {
+      setToastMessage('No entries to print for selected dates/filters');
+      setTimeout(() => setToastMessage(''), 3000);
+      return;
+    }
+
+    const branchCode = activeBranch?.branch_code || 'ULLAL';
+    const branchName = activeBranch?.branch_name || 'Ullal Unit';
+    const title = `Daily Procurement Statement - ${branchName}`;
+
+    const totalGross = filteredEntries.reduce((s, e) => s + (parseFloat(e.gross_loaded_kg) || 0), 0);
+    const totalTare = filteredEntries.reduce((s, e) => s + (parseFloat(e.empty_tare_kg) || 0), 0);
+    const totalIce = filteredEntries.reduce((s, e) => s + (parseFloat(e.ice_water_kg) || 0), 0);
+    const totalNet = filteredEntries.reduce((s, e) => s + (parseFloat(e.net_kg) || 0), 0);
+    const totalAmt = filteredEntries.reduce((s, e) => s + (parseFloat(e.total_amount) || 0), 0);
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      window.print();
+      return;
+    }
+
+    const tableRowsHtml = filteredEntries
+      .map((e, idx) => {
+        const rateText =
+          e.rates && e.rates.length > 0
+            ? e.rates.map((r) => `${r.fish_name}: ₹${r.rate_per_kg}`).join('<br>')
+            : e.status === 'RATE_PENDING'
+            ? '<span style="color:#b45309">Rate Pending</span>'
+            : '—';
+        const amtText = e.total_amount
+          ? `₹${Number(e.total_amount).toLocaleString(undefined, {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}`
+          : '—';
+        const dateStr = e.entry_date ? e.entry_date.split('T')[0] : '';
+
+        return `
+          <tr>
+            <td style="text-align: center; font-weight: bold;">${idx + 1}</td>
+            <td>${dateStr}</td>
+            <td style="font-family: monospace;">${e.slip_no || `#${e.daily_sl_no || idx + 1}`}</td>
+            <td><strong>${e.party_name}</strong></td>
+            <td style="font-family: monospace;">${e.vehicle_no || ''}</td>
+            <td style="text-align: right; font-family: monospace;">${Number(e.gross_loaded_kg || 0).toLocaleString()}</td>
+            <td style="text-align: right; font-family: monospace;">${Number(e.empty_tare_kg || 0).toLocaleString()}</td>
+            <td style="text-align: right; font-family: monospace;">${Number(e.ice_water_kg || 0).toLocaleString()}</td>
+            <td style="text-align: right; font-family: monospace; font-weight: bold;">${Number(e.net_kg || 0).toLocaleString()}</td>
+            <td style="font-size: 11px;">${e.remarks || '—'}</td>
+            <td style="text-align: right; font-family: monospace; font-size: 11px;">${rateText}</td>
+            <td style="text-align: right; font-family: monospace; font-weight: bold;">${amtText}</td>
+          </tr>
+        `;
+      })
+      .join('');
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <title>${title}</title>
+          <style>
+            @page {
+              size: A4 landscape;
+              margin: 10mm;
+            }
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+              color: #0f172a;
+              margin: 0;
+              padding: 16px;
+              font-size: 12px;
+            }
+            .header {
+              border-bottom: 2px solid #0f172a;
+              padding-bottom: 12px;
+              margin-bottom: 16px;
+              display: flex;
+              justify-content: space-between;
+              align-items: flex-start;
+            }
+            .title {
+              font-size: 18px;
+              font-weight: 900;
+              text-transform: uppercase;
+              letter-spacing: 0.5px;
+              margin: 0 0 4px 0;
+            }
+            .subtitle {
+              font-size: 12px;
+              color: #475569;
+              margin: 0;
+            }
+            .meta-box {
+              text-align: right;
+              font-size: 11px;
+              color: #334155;
+            }
+            .summary-strip {
+              display: flex;
+              gap: 16px;
+              background: #f8fafc;
+              border: 1px solid #e2e8f0;
+              padding: 10px 16px;
+              border-radius: 8px;
+              margin-bottom: 16px;
+              font-size: 12px;
+            }
+            .summary-item strong {
+              font-size: 13px;
+              color: #0f172a;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-bottom: 24px;
+            }
+            th {
+              background-color: #f1f5f9;
+              color: #334155;
+              font-size: 11px;
+              font-weight: 700;
+              text-transform: uppercase;
+              border: 1px solid #cbd5e1;
+              padding: 6px 8px;
+              text-align: left;
+            }
+            td {
+              border: 1px solid #e2e8f0;
+              padding: 6px 8px;
+              vertical-align: middle;
+            }
+            tr:nth-child(even) td {
+              background-color: #f8fafc;
+            }
+            .total-row td {
+              background-color: #f1f5f9;
+              font-weight: bold;
+              border-top: 2px solid #334155;
+              border-bottom: 2px solid #334155;
+            }
+            .signatures {
+              margin-top: 40px;
+              display: flex;
+              justify-content: space-between;
+              page-break-inside: avoid;
+            }
+            .signature-box {
+              width: 28%;
+              text-align: center;
+              border-top: 1px solid #64748b;
+              padding-top: 6px;
+              font-size: 11px;
+              font-weight: 600;
+              color: #475569;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <h1 class="title">Indo Fish Meal &amp; Oil Co. Pvt. Ltd.</h1>
+              <p class="subtitle">Procurement Statement · <strong>${branchName} (${branchCode})</strong></p>
+            </div>
+            <div class="meta-box">
+              <div><strong>Period:</strong> ${fromDate === toDate ? fromDate : `${fromDate} to ${toDate}`}</div>
+              <div><strong>Generated:</strong> ${new Date().toLocaleString()}</div>
+              <div><strong>Status:</strong> ${statusFilter}</div>
+            </div>
+          </div>
+
+          <div class="summary-strip">
+            <div class="summary-item">Total Slips: <strong>${filteredEntries.length}</strong></div>
+            <div class="summary-item">Total Gross: <strong>${Number(totalGross).toLocaleString()} kg</strong></div>
+            <div class="summary-item">Total Tare: <strong>${Number(totalTare).toLocaleString()} kg</strong></div>
+            <div class="summary-item">Total Ice: <strong>${Number(totalIce).toLocaleString()} kg</strong></div>
+            <div class="summary-item">Total Net Weight: <strong>${Number(totalNet).toLocaleString()} kg</strong></div>
+            ${totalAmt > 0 ? `<div class="summary-item">Total Value: <strong>₹${Number(totalAmt).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></div>` : ''}
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 30px; text-align: center;">#</th>
+                <th>Date</th>
+                <th>Slip No</th>
+                <th>Party Name</th>
+                <th>Vehicle No</th>
+                <th style="text-align: right;">Gross (kg)</th>
+                <th style="text-align: right;">Tare (kg)</th>
+                <th style="text-align: right;">Ice (kg)</th>
+                <th style="text-align: right;">Net (kg)</th>
+                <th>Remarks / Mix</th>
+                <th style="text-align: right;">Rate (₹/kg)</th>
+                <th style="text-align: right;">Amount (₹)</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${tableRowsHtml}
+              <tr class="total-row">
+                <td colspan="5" style="text-align: right; padding-right: 12px;">TOTALS:</td>
+                <td style="text-align: right; font-family: monospace;">${Number(totalGross).toLocaleString()}</td>
+                <td style="text-align: right; font-family: monospace;">${Number(totalTare).toLocaleString()}</td>
+                <td style="text-align: right; font-family: monospace;">${Number(totalIce).toLocaleString()}</td>
+                <td style="text-align: right; font-family: monospace;">${Number(totalNet).toLocaleString()}</td>
+                <td></td>
+                <td></td>
+                <td style="text-align: right; font-family: monospace;">${totalAmt > 0 ? `₹${Number(totalAmt).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="signatures">
+            <div class="signature-box">Weighbridge Staff Signature</div>
+            <div class="signature-box">Billing Admin Signature</div>
+            <div class="signature-box">Authorized Signatory</div>
+          </div>
+
+          <script>
+            window.focus();
+            setTimeout(() => {
+              window.print();
+            }, 350);
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+
+    setToastMessage('PDF report opened for print/save');
+    setTimeout(() => setToastMessage(''), 3000);
   };
 
   return (
@@ -430,22 +838,18 @@ export default function StatementView({ onNavigateToRates }) {
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={() => {
-                  setToastMessage('Excel report ready for download');
-                  setTimeout(() => setToastMessage(''), 3000);
-                }}
-                className="py-2.5 rounded-xl border border-slate-200 bg-white font-bold text-xs text-slate-700 hover:bg-slate-50 shadow-sm"
+                onClick={handleExportExcel}
+                className="py-2.5 rounded-xl border border-slate-200 bg-white font-bold text-xs text-slate-700 hover:bg-slate-50 shadow-sm flex items-center justify-center gap-1.5 transition-all"
               >
+                <Download className="w-3.5 h-3.5 text-slate-500" />
                 Excel Export
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setToastMessage('PDF report ready for download');
-                  setTimeout(() => setToastMessage(''), 3000);
-                }}
-                className="py-2.5 rounded-xl border border-slate-200 bg-white font-bold text-xs text-slate-700 hover:bg-slate-50 shadow-sm"
+                onClick={handleExportPDF}
+                className="py-2.5 rounded-xl border border-slate-200 bg-white font-bold text-xs text-slate-700 hover:bg-slate-50 shadow-sm flex items-center justify-center gap-1.5 transition-all"
               >
+                <Printer className="w-3.5 h-3.5 text-slate-500" />
                 PDF Export
               </button>
             </div>
@@ -455,32 +859,26 @@ export default function StatementView({ onNavigateToRates }) {
         <div className="grid grid-cols-3 gap-2">
           <button
             type="button"
-            onClick={() => {
-              setToastMessage('Statement shared');
-              setTimeout(() => setToastMessage(''), 3000);
-            }}
-            className="py-2.5 rounded-xl border border-slate-200 bg-white font-bold text-xs text-slate-700 hover:bg-slate-50 shadow-sm"
+            onClick={handleShare}
+            className="py-2.5 rounded-xl border border-slate-200 bg-white font-bold text-xs text-slate-700 hover:bg-slate-50 shadow-sm flex items-center justify-center gap-1.5 transition-all"
           >
+            <Share2 className="w-3.5 h-3.5 text-slate-500" />
             Share
           </button>
           <button
             type="button"
-            onClick={() => {
-              setToastMessage('PDF ready to download');
-              setTimeout(() => setToastMessage(''), 3000);
-            }}
-            className="py-2.5 rounded-xl border border-slate-200 bg-white font-bold text-xs text-slate-700 hover:bg-slate-50 shadow-sm"
+            onClick={handleExportPDF}
+            className="py-2.5 rounded-xl border border-slate-200 bg-white font-bold text-xs text-slate-700 hover:bg-slate-50 shadow-sm flex items-center justify-center gap-1.5 transition-all"
           >
+            <Printer className="w-3.5 h-3.5 text-slate-500" />
             PDF
           </button>
           <button
             type="button"
-            onClick={() => {
-              setToastMessage('Excel ready to download');
-              setTimeout(() => setToastMessage(''), 3000);
-            }}
-            className="py-2.5 rounded-xl border border-slate-200 bg-white font-bold text-xs text-slate-700 hover:bg-slate-50 shadow-sm"
+            onClick={handleExportExcel}
+            className="py-2.5 rounded-xl border border-slate-200 bg-white font-bold text-xs text-slate-700 hover:bg-slate-50 shadow-sm flex items-center justify-center gap-1.5 transition-all"
           >
+            <Download className="w-3.5 h-3.5 text-slate-500" />
             Excel
           </button>
         </div>
@@ -491,7 +889,7 @@ export default function StatementView({ onNavigateToRates }) {
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white max-w-md w-full rounded-3xl p-5 border border-slate-200 shadow-xl space-y-3.5 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-              <h3 className="font-bold text-base text-slate-900">Send Statement on WhatsApp</h3>
+              <h3 className="font-bold text-base text-slate-900">Send Statement</h3>
               <button
                 onClick={() => setShareModalOpen(false)}
                 className="p-1 rounded-lg text-slate-400 hover:text-slate-700"
@@ -512,6 +910,7 @@ export default function StatementView({ onNavigateToRates }) {
                 }}
                 className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800"
               >
+                <option value="">All Clients (Full Statement)</option>
                 {partiesInEntries.map((p) => (
                   <option key={p} value={p}>
                     {p}
@@ -520,38 +919,56 @@ export default function StatementView({ onNavigateToRates }) {
               </select>
             </div>
 
-            <div>
-              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
-                Client WhatsApp Number
-              </label>
-              <input
-                type="text"
-                value={sharePhone}
-                onChange={(e) => setSharePhone(e.target.value)}
-                placeholder="+91 ..."
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800"
-              />
-            </div>
+            {shareParty && (
+              <div>
+                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                  Client WhatsApp Number
+                </label>
+                <input
+                  type="text"
+                  value={sharePhone}
+                  onChange={(e) => setSharePhone(e.target.value)}
+                  placeholder="+91 ..."
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800"
+                />
+              </div>
+            )}
 
             <div>
               <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
-                Report Format
+                Attach File Format
               </label>
               <div className="flex gap-2">
-                {['Excel', 'PDF'].map((f) => (
-                  <button
-                    key={f}
-                    type="button"
-                    onClick={() => setShareFormat(f)}
-                    className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-all ${
-                      shareFormat === f
-                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
-                        : 'bg-slate-50 text-slate-700 border-slate-200'
-                    }`}
-                  >
-                    {f}
-                  </button>
-                ))}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShareFormat('Excel');
+                    handleExportExcel();
+                  }}
+                  className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-1.5 ${
+                    shareFormat === 'Excel'
+                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Excel (.csv)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShareFormat('PDF');
+                    handleExportPDF();
+                  }}
+                  className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-1.5 ${
+                    shareFormat === 'PDF'
+                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  PDF Report
+                </button>
               </div>
             </div>
 
@@ -566,13 +983,22 @@ export default function StatementView({ onNavigateToRates }) {
               />
             </div>
 
-            <button
-              type="button"
-              onClick={handleSendWhatsApp}
-              className="w-full py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md flex items-center justify-center gap-2"
-            >
-              <Send className="w-4 h-4" /> Open WhatsApp Web / App
-            </button>
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button
+                type="button"
+                onClick={handleCopySummary}
+                className="py-3 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-800 font-bold text-xs flex items-center justify-center gap-1.5 transition-all"
+              >
+                <Copy className="w-4 h-4 text-slate-500" /> Copy Text
+              </button>
+              <button
+                type="button"
+                onClick={handleSendWhatsApp}
+                className="py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md flex items-center justify-center gap-1.5 transition-all"
+              >
+                <Send className="w-4 h-4" /> Open WhatsApp
+              </button>
+            </div>
           </div>
         </div>
       )}

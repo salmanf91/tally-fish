@@ -212,16 +212,17 @@ FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TABLE IF NOT EXISTS entry_rates (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     entry_id UUID NOT NULL REFERENCES entries(id) ON DELETE CASCADE,
+    box_id UUID REFERENCES entry_boxes(id) ON DELETE CASCADE,
     fish_type_id UUID REFERENCES fish_types(id) ON DELETE SET NULL,
     fish_name VARCHAR(100) NOT NULL,
     rate_per_kg NUMERIC(10, 2) NOT NULL CHECK (rate_per_kg >= 0),
     rated_by UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT uq_entry_rates_entry_fish UNIQUE (entry_id, fish_name)
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_entry_rates_entry_id ON entry_rates(entry_id);
+CREATE INDEX IF NOT EXISTS idx_entry_rates_box_id ON entry_rates(box_id);
 CREATE INDEX IF NOT EXISTS idx_entry_rates_fish_type_id ON entry_rates(fish_type_id);
 CREATE INDEX IF NOT EXISTS idx_entry_rates_rated_by ON entry_rates(rated_by);
 

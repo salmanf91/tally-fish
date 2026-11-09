@@ -62,7 +62,8 @@ export default function RatesView({ initialEntryId = null, onDone }) {
     if (!currentEntry) return [];
     if (Array.isArray(currentEntry.boxes) && currentEntry.boxes.length > 0) {
       return currentEntry.boxes.map((b, idx) => ({
-        key: String(idx),
+        key: b.id || String(idx),
+        box_id: b.id,
         fish: b.fish_name,
         box_count: b.box_count,
         pct: parseFloat(b.mix_percentage) || 100,
@@ -81,12 +82,12 @@ export default function RatesView({ initialEntryId = null, onDone }) {
       parts.forEach((p) => {
         // Pre-fill existing rate if already rated
         const existing = Array.isArray(currentEntry.rates)
-          ? currentEntry.rates.find((r) => r.fish_name === p.fish)?.rate_per_kg
+          ? currentEntry.rates.find((r) => (r.box_id && r.box_id === p.box_id) || (!r.box_id && r.fish_name === p.fish))?.rate_per_kg
           : null;
         initial[p.key] = existing ? String(existing) : '';
       });
       setRatesMap(initial);
-      setActivePartKey('0');
+      setActivePartKey(parts[0]?.key || '0');
       setErrorMessage('');
     }
   }, [currentEntry, parts]);
@@ -115,25 +116,6 @@ export default function RatesView({ initialEntryId = null, onDone }) {
     }));
   };
 
-  const handleAdjust = (delta) => {
-    const curVal = parseFloat(ratesMap[activePartKey]) || parts.find((p) => p.key === activePartKey)?.lastRate || 35;
-    const nextVal = Math.max(1, curVal + delta);
-    setRatesMap((prev) => ({
-      ...prev,
-      [activePartKey]: String(nextVal),
-    }));
-  };
-
-  const handleApplySameToAll = () => {
-    const curVal = ratesMap[activePartKey];
-    if (!curVal) return;
-    const next = {};
-    parts.forEach((p) => {
-      next[p.key] = curVal;
-    });
-    setRatesMap(next);
-  };
-
   const handleApplyLastRate = (rate) => {
     setRatesMap((prev) => ({
       ...prev,
@@ -153,7 +135,9 @@ export default function RatesView({ initialEntryId = null, onDone }) {
     if (!currentEntry) return;
 
     // Validate that every part has a rate > 0
+    // Passes box_id so 2 entries of same fish can have independent rates (Point 6)
     const rates = parts.map((p) => ({
+      box_id: p.box_id,
       fish_name: p.fish,
       rate_per_kg: parseFloat(ratesMap[p.key]) || 0,
     }));
@@ -300,10 +284,22 @@ export default function RatesView({ initialEntryId = null, onDone }) {
                 </p>
               </div>
 
-              <div className="text-right">
-                <span className="text-lg font-mono font-black text-slate-900">
-                  ₹ {currentVal || <span className="text-slate-300">0</span>}
-                </span>
+              <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                <span className="text-base font-bold text-slate-500 font-mono">₹</span>
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  placeholder="0"
+                  value={currentVal || ''}
+                  onFocus={() => setActivePartKey(p.key)}
+                  onChange={(e) => {
+                    setActivePartKey(p.key);
+                    setRatesMap((prev) => ({ ...prev, [p.key]: e.target.value }));
+                  }}
+                  className="w-24 text-right text-lg font-mono font-black text-slate-900 bg-white border border-slate-300 rounded-xl px-2.5 py-1 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+                <span className="text-xs text-slate-400 font-semibold">/kg</span>
               </div>
             </div>
           );
@@ -318,46 +314,7 @@ export default function RatesView({ initialEntryId = null, onDone }) {
         )}
       </div>
 
-      {/* Quick Adjustments: -1, +1, Same as last, Apply to all */}
-      <div className="grid grid-cols-3 gap-2">
-        <button
-          type="button"
-          onClick={() => handleAdjust(-1)}
-          className="touch-key py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 font-bold text-xs shadow-sm hover:bg-slate-50"
-        >
-          − 1
-        </button>
-
-        <button
-          type="button"
-          onClick={() => handleAdjust(1)}
-          className="touch-key py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 font-bold text-xs shadow-sm hover:bg-slate-50"
-        >
-          + 1
-        </button>
-
-        {activePart?.lastRate && (
-          <button
-            type="button"
-            onClick={() => handleApplyLastRate(activePart.lastRate)}
-            className="touch-key py-2.5 rounded-xl bg-white border border-slate-200 text-amber-800 font-bold text-xs shadow-sm hover:bg-slate-50"
-          >
-            Last ₹{activePart.lastRate}
-          </button>
-        )}
-      </div>
-
-      {parts.length > 1 && (
-        <button
-          type="button"
-          onClick={handleApplySameToAll}
-          className="touch-key w-full py-2 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 font-bold text-xs"
-        >
-          Apply ₹{ratesMap[activePartKey] || '0'} to all fish
-        </button>
-      )}
-
-      {/* On-Screen Keypad for Rate */}
+      {/* On-Screen Keypad for Rate (screenshots 3, 4, 5 removed) */}
       <div className="light-card p-3 rounded-2xl">
         <NumericKeypad
           value={ratesMap[activePartKey] || ''}
@@ -366,12 +323,6 @@ export default function RatesView({ initialEntryId = null, onDone }) {
           onClear={() => handleKeypadChange('')}
           allowDecimal={true}
           maxDecimals={2}
-          quickChips={[
-            { label: '30', value: 30 },
-            { label: '35', value: 35 },
-            { label: '40', value: 40 },
-            { label: '45', value: 45 },
-          ]}
         />
       </div>
 

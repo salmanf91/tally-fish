@@ -56,28 +56,25 @@ async function setEntryRates(req, res, next) {
         throw new Error('Cannot set rates: Entry has no fish boxes recorded');
       }
 
-      // 3. Upsert entry rates
+      // 3. Replace entry rates
+      await client.query('DELETE FROM entry_rates WHERE entry_id = $1', [id]);
+
       const savedRates = [];
       for (const r of rates) {
         const fishName = r.fish_name ? r.fish_name.trim().toUpperCase() : 'FISH';
         const ratePerKg = Number(r.rate_per_kg);
+        const boxId = r.box_id || null;
 
         const rateRes = await client.query(
           `
           INSERT INTO entry_rates (
-            id, entry_id, fish_type_id, fish_name, rate_per_kg, rated_by
+            id, entry_id, box_id, fish_type_id, fish_name, rate_per_kg, rated_by
           ) VALUES (
-            gen_random_uuid(), $1, $2, $3, $4, $5
+            gen_random_uuid(), $1, $2, $3, $4, $5, $6
           )
-          ON CONFLICT (entry_id, fish_name)
-          DO UPDATE SET
-            rate_per_kg = EXCLUDED.rate_per_kg,
-            fish_type_id = COALESCE(EXCLUDED.fish_type_id, entry_rates.fish_type_id),
-            rated_by = EXCLUDED.rated_by,
-            updated_at = CURRENT_TIMESTAMP
           RETURNING *;
           `,
-          [id, r.fish_type_id || null, fishName, ratePerKg, actorId]
+          [id, boxId, r.fish_type_id || null, fishName, ratePerKg, actorId]
         );
         savedRates.push(rateRes.rows[0]);
       }
