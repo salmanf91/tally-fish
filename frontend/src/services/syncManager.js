@@ -1,79 +1,119 @@
-import { getOfflineEntries, removeOfflineEntry, saveOfflineEntry } from './db';
+import {
+  getOfflineEntries,
+  removeOfflineEntry,
+  saveOfflineEntry,
+  getOfflineRateFixes,
+  removeOfflineRateFix,
+} from './db';
 import { api } from './api';
 
 let isSyncing = false;
 
 /**
- * Flush all offline-buffered entries to the server batch sync endpoint
+ * Flush all offline-buffered entries and rate fixes to the server
  * @param {import('@tanstack/react-query').QueryClient} [queryClient]
- * @returns {Promise<{ flushed: number, conflicts: number, errors: number }>}
+ * @returns {Promise<{ flushed: number, ratesFlushed: number, conflicts: number, errors: number }>}
  */
 export async function flushOfflineQueue(queryClient = null) {
   if (isSyncing || !navigator.onLine) {
-    return { flushed: 0, conflicts: 0, errors: 0 };
+    return { flushed: 0, ratesFlushed: 0, conflicts: 0, errors: 0 };
   }
 
   isSyncing = true;
+  let syncedCount = 0;
+  let ratesFlushedCount = 0;
+  let conflictsCount = 0;
+  let errorsCount = 0;
+
   try {
+    // -------------------------------------------------------------------------
+    // 1. Flush Offline Weighbridge Intake Entries
+    // -------------------------------------------------------------------------
     const allOffline = await getOfflineEntries();
-    // Only flush entries that are awaiting sync (status QUEUED_SYNC or OFFLINE_PENDING)
     const pendingEntries = allOffline.filter(
       (e) => e.status === 'QUEUED_SYNC' || e.status === 'OFFLINE_PENDING'
     );
 
-    if (pendingEntries.length === 0) {
-      return { flushed: 0, conflicts: 0, errors: 0 };
-    }
+    if (pendingEntries.length > 0) {
+      console.log(`[SyncManager] Flushing ${pendingEntries.length} offline entries...`);
+      try {
+        const res = await api.post('/entries/sync', { entries: pendingEntries });
+        const { synced = [], conflicts = [], errors = [] } = res.data || {};
 
-    console.log(`[SyncManager] Flushing ${pendingEntries.length} offline entries...`);
+        syncedCount = synced.length;
+        conflictsCount = conflicts.length;
+        errorsCount += errors.length;
 
-    const res = await api.post('/entries/sync', { entries: pendingEntries });
-    const { synced = [], conflicts = [], errors = [] } = res.data || {};
+        // Remove synced from IDB
+        for (const item of synced) {
+          if (item.tempId) {
+            await removeOfflineEntry(item.tempId);
+          }
+        }
 
-    // 1. Remove successfully synced entries from IndexedDB
-    for (const item of synced) {
-      if (item.tempId) {
-        await removeOfflineEntry(item.tempId);
+        // Mark conflicts in IDB
+        for (const conflict of conflicts) {
+          const match = pendingEntries.find((e) => e.tempId === conflict.tempId);
+          if (match) {
+            await saveOfflineEntry({
+              ...match,
+              status: 'HOLD_REVIEW',
+              conflictMessage: conflict.message || 'Conflict: Entry locked by Admin while offline.',
+              updatedAt: new Date().toISOString(),
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('[SyncManager] Entry flush error:', err.message);
+        errorsCount++;
       }
     }
 
-    // 2. Mark conflicting entries as 'HOLD_REVIEW' (Held for Admin Review) in IndexedDB
-    for (const conflict of conflicts) {
-      const match = pendingEntries.find((e) => e.tempId === conflict.tempId);
-      if (match) {
-        await saveOfflineEntry({
-          ...match,
-          status: 'HOLD_REVIEW',
-          conflictMessage: conflict.message || 'Conflict: Entry locked by Admin while offline.',
-          updatedAt: new Date().toISOString(),
-        });
+    // -------------------------------------------------------------------------
+    // 2. Flush Offline Rate Fixes
+    // -------------------------------------------------------------------------
+    const pendingRates = await getOfflineRateFixes();
+    if (pendingRates.length > 0) {
+      console.log(`[SyncManager] Flushing ${pendingRates.length} offline rate fixes...`);
+      for (const rf of pendingRates) {
+        try {
+          await api.post(`/entries/${rf.entryId}/rates`, { rates: rf.rates });
+          await removeOfflineRateFix(rf.entryId);
+          ratesFlushedCount++;
+        } catch (rfErr) {
+          console.warn(`[SyncManager] Rate fix flush error for entry ${rf.entryId}:`, rfErr.message);
+          errorsCount++;
+        }
       }
     }
 
-    // 3. Notify app components and refresh Query cache
-    if (queryClient) {
-      queryClient.invalidateQueries({ queryKey: ['entries'] });
-      queryClient.invalidateQueries({ queryKey: ['masters'] });
-    }
+    // -------------------------------------------------------------------------
+    // 3. Invalidate Query Caches & Notify Listeners
+    // -------------------------------------------------------------------------
+    if (syncedCount > 0 || ratesFlushedCount > 0 || conflictsCount > 0) {
+      if (queryClient) {
+        queryClient.invalidateQueries({ queryKey: ['entries'] });
+        queryClient.invalidateQueries({ queryKey: ['masters'] });
+      }
 
-    window.dispatchEvent(
-      new CustomEvent('tally:sync-complete', {
-        detail: {
-          syncedCount: synced.length,
-          conflictsCount: conflicts.length,
-          errorsCount: errors.length,
-        },
-      })
-    );
+      window.dispatchEvent(
+        new CustomEvent('tally:sync-complete', {
+          detail: {
+            syncedCount,
+            ratesFlushedCount,
+            conflictsCount,
+            errorsCount,
+          },
+        })
+      );
+    }
 
     return {
-      flushed: synced.length,
-      conflicts: conflicts.length,
-      errors: errors.length,
+      flushed: syncedCount,
+      ratesFlushed: ratesFlushedCount,
+      conflicts: conflictsCount,
+      errors: errorsCount,
     };
-  } catch (err) {
-    console.warn('[SyncManager] Offline flush error:', err.message);
-    return { flushed: 0, conflicts: 0, errors: 1 };
   } finally {
     isSyncing = false;
   }
@@ -122,4 +162,3 @@ export function initSyncManager(queryClient) {
     }, 1500);
   }
 }
-

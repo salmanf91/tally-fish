@@ -3,6 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { BadgeDollarSign, Lock, Check, AlertCircle, ArrowRight, ArrowLeft, SkipForward } from 'lucide-react';
 import { useBranch } from '../context/BranchContext';
 import { api } from '../services/api';
+import { saveOfflineRateFix } from '../services/db';
+import { registerBackgroundSync } from '../services/syncManager';
 
 export default function RatesView({ initialEntryId = null, onDone }) {
   const { activeBranchId, activeBranch, availableBranches, setActiveBranchId } = useBranch();
@@ -149,9 +151,12 @@ export default function RatesView({ initialEntryId = null, onDone }) {
     }
   }, [currentEntry, parts]);
 
-  // Mutation to save rates & lock entry
+  // Mutation to save rates & lock entry (with offline IndexedDB fallback)
   const fixRatesMutation = useMutation({
     mutationFn: async ({ entryId, rates }) => {
+      if (!navigator.onLine) {
+        throw new Error('OFFLINE_MODE');
+      }
       const res = await api.post(`/entries/${entryId}/rates`, { rates });
       return res.data;
     },
@@ -162,7 +167,49 @@ export default function RatesView({ initialEntryId = null, onDone }) {
         onDone();
       }
     },
-    onError: (err) => {
+    onError: async (err, { entryId, rates }) => {
+      // If offline or network error, buffer rate fix into IndexedDB
+      const isNetworkErr =
+        err.message === 'OFFLINE_MODE' ||
+        err.message?.includes('NetworkError') ||
+        err.message?.includes('Failed to fetch') ||
+        !navigator.onLine;
+
+      if (isNetworkErr) {
+        try {
+          await saveOfflineRateFix({
+            entryId,
+            rates,
+            branchId: activeBranchId,
+            createdAt: new Date().toISOString(),
+          });
+          registerBackgroundSync();
+
+          // Optimistically update React Query cache so statement/billing reflects the rate
+          queryClient.setQueryData(['entries', activeBranchId], (old = []) => {
+            return old.map((e) => {
+              if (e.id !== entryId) return e;
+              return {
+                ...e,
+                status: 'LOCKED',
+                rates: rates.map((r) => ({
+                  ...r,
+                  rate_per_kg: r.rate_per_kg,
+                })),
+                isOfflineRate: true,
+              };
+            });
+          });
+
+          if (onDone) {
+            onDone();
+          }
+          return;
+        } catch (dbErr) {
+          console.warn('[RatesView] Failed to save offline rate fix:', dbErr);
+        }
+      }
+
       setErrorMessage(err.message || 'Failed to fix rates');
     },
   });

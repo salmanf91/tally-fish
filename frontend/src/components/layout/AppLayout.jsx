@@ -31,7 +31,7 @@ export default function AppLayout({ children, activeTab, onSelectTab }) {
       {/* Main View Area - Independent Scroll Container */}
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto">
         {/* Mobile Header (< 1024px) */}
-        <MobileTouchHeader isOnline={isOnline} />
+        <MobileTouchHeader isOnline={isOnline} onSelectTab={onSelectTab} />
 
         {/* Global Offline Warning Banner */}
         {!isOnline && (
