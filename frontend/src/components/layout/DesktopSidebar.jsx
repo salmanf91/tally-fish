@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   Scale,
   FileSpreadsheet,
@@ -16,12 +17,28 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useBranch } from '../../context/BranchContext';
+import { api } from '../../services/api';
 
 export default function DesktopSidebar({ activeTab, onSelectTab, isOnline = true }) {
   const { user, logout } = useAuth();
   const { activeBranchId, activeBranch, availableBranches, setActiveBranchId } = useBranch();
 
   const role = activeBranch?.role || 'staffAdmin';
+
+  // Fetch entries to show dynamic pending rate count
+  const { data: entries = [] } = useQuery({
+    queryKey: ['entries', activeBranchId],
+    queryFn: async () => {
+      const res = await api.get('/entries');
+      return res.data || [];
+    },
+    enabled: !!activeBranchId,
+  });
+
+  const pendingRatesCount = useMemo(() => {
+    if (!Array.isArray(entries)) return 0;
+    return entries.filter((e) => e.status === 'RATE_PENDING').length;
+  }, [entries]);
 
   const roleTitle = {
     owner: 'Owner / Administrator',
@@ -37,7 +54,7 @@ export default function DesktopSidebar({ activeTab, onSelectTab, isOnline = true
 
   // Navigation Items tailored per role matching the workflow prototype
   const navItems = [
-    // All roles: New Entry & Statement
+    // Staff Admin: Today & New Entry only
     {
       id: 'today',
       label: 'Today',
@@ -54,7 +71,7 @@ export default function DesktopSidebar({ activeTab, onSelectTab, isOnline = true
       id: 'statement',
       label: 'Statement',
       icon: FileSpreadsheet,
-      roles: ['owner', 'billingAdmin', 'staffAdmin'],
+      roles: ['owner', 'billingAdmin'], // Removed staffAdmin per user request
     },
 
     // Owner: Set rate, Accounts
@@ -63,7 +80,8 @@ export default function DesktopSidebar({ activeTab, onSelectTab, isOnline = true
       label: 'Set rate',
       icon: BadgeDollarSign,
       roles: ['owner'],
-      badge: 'Queue',
+      badge: pendingRatesCount > 0 ? `${pendingRatesCount} pending` : null,
+      badgeColor: 'amber',
     },
     {
       id: 'accounts',
@@ -177,7 +195,11 @@ export default function DesktopSidebar({ activeTab, onSelectTab, isOnline = true
                 <span>{item.label}</span>
               </div>
               {item.badge && (
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-semibold border border-slate-200">
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border transition-colors ${
+                  item.badgeColor === 'amber'
+                    ? 'bg-amber-100 text-amber-800 border-amber-300'
+                    : 'bg-slate-100 text-slate-600 border-slate-200'
+                }`}>
                   {item.badge}
                 </span>
               )}

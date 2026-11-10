@@ -15,6 +15,9 @@ import {
   Check,
   Edit3,
   Plus,
+  BadgeDollarSign,
+  Clock,
+  CheckCircle2,
 } from 'lucide-react';
 import { useBranch } from '../context/BranchContext';
 import { useAuth } from '../context/AuthContext';
@@ -150,6 +153,9 @@ export default function StatementView({ onNavigateToRates, onNewEntry, onEditEnt
 
   const TODAY = getLocalDateString();
 
+  // Statement separation: 'settled' (finalized statement) vs 'pending' (pending intake slips)
+  const [statementMode, setStatementMode] = useState('settled');
+
   // Filters
   const [fromDate, setFromDate] = useState(TODAY);
   const [toDate, setToDate] = useState(TODAY);
@@ -214,12 +220,34 @@ export default function StatementView({ onNavigateToRates, onNewEntry, onEditEnt
     });
   }, [allEntries, offlineRateFixes]);
 
+  // Counts for Settled and Pending modes
+  const settledCount = useMemo(() => {
+    return combinedEntries.filter((e) => {
+      const d = e.entry_date ? e.entry_date.split('T')[0] : '';
+      if (d < fromDate || d > toDate) return false;
+      return e.status !== 'RATE_PENDING';
+    }).length;
+  }, [combinedEntries, fromDate, toDate]);
+
+  const pendingCount = useMemo(() => {
+    return combinedEntries.filter((e) => {
+      const d = e.entry_date ? e.entry_date.split('T')[0] : '';
+      if (d < fromDate || d > toDate) return false;
+      return e.status === 'RATE_PENDING';
+    }).length;
+  }, [combinedEntries, fromDate, toDate]);
+
   // Filter entries
   const filteredEntries = useMemo(() => {
     return combinedEntries.filter((e) => {
       const d = e.entry_date ? e.entry_date.split('T')[0] : '';
       if (d < fromDate || d > toDate) return false;
       if (selectedParty && e.party_name !== selectedParty) return false;
+
+      // Mode separation: separate reports/statements from pending intakes
+      if (statementMode === 'settled' && e.status === 'RATE_PENDING') return false;
+      if (statementMode === 'pending' && e.status !== 'RATE_PENDING') return false;
+
       if (statusFilter === 'Rate pending' && e.status !== 'RATE_PENDING') return false;
       if (statusFilter === 'Rate set' && e.status !== 'LOCKED') return false;
       if (searchQuery.trim()) {
@@ -229,7 +257,7 @@ export default function StatementView({ onNavigateToRates, onNewEntry, onEditEnt
       }
       return true;
     });
-  }, [combinedEntries, fromDate, toDate, selectedParty, statusFilter, searchQuery]);
+  }, [combinedEntries, fromDate, toDate, selectedParty, statementMode, statusFilter, searchQuery]);
 
   // Statistics
   const totalNetKg = useMemo(() => {
@@ -794,6 +822,66 @@ export default function StatementView({ onNavigateToRates, onNewEntry, onEditEnt
         </div>
       )}
 
+      {/* Primary Statement / Report Mode Selector: Settled Statements vs Pending Intake Slips */}
+      <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
+        <button
+          type="button"
+          onClick={() => setStatementMode('settled')}
+          className={`flex-1 sm:flex-initial px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+            statementMode === 'settled'
+              ? 'bg-amber-500 text-white shadow-sm ring-1 ring-amber-400'
+              : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+          }`}
+        >
+          <FileCheck className="w-4 h-4" />
+          <span>Settled Statement</span>
+          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono font-bold ${
+            statementMode === 'settled' ? 'bg-amber-600 text-white' : 'bg-slate-100 text-slate-600'
+          }`}>
+            {settledCount}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setStatementMode('pending')}
+          className={`flex-1 sm:flex-initial px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+            statementMode === 'pending'
+              ? 'bg-amber-500 text-white shadow-sm ring-1 ring-amber-400'
+              : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+          }`}
+        >
+          <Clock className="w-4 h-4" />
+          <span>Pending Intake Slips</span>
+          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono font-bold ${
+            statementMode === 'pending'
+              ? 'bg-amber-600 text-white'
+              : pendingCount > 0
+              ? 'bg-amber-100 text-amber-800 border border-amber-300'
+              : 'bg-slate-100 text-slate-600'
+          }`}>
+            {pendingCount}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setStatementMode('all')}
+          className={`px-3 py-2.5 rounded-xl text-xs font-bold transition-all hidden sm:flex items-center gap-1.5 ${
+            statementMode === 'all'
+              ? 'bg-slate-800 text-white shadow-sm'
+              : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50'
+          }`}
+        >
+          <span>All Slips</span>
+          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono ${
+            statementMode === 'all' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-600'
+          }`}>
+            {settledCount + pendingCount}
+          </span>
+        </button>
+      </div>
+
       {/* Filter Control Box */}
       <div className="light-card p-4 rounded-2xl space-y-3">
         {/* Preset chips */}
@@ -917,29 +1005,16 @@ export default function StatementView({ onNavigateToRates, onNewEntry, onEditEnt
         </div>
       </div>
 
-      {/* Pending Rate Warning Banner */}
-      {pendingRateCount > 0 && (
-        <div className="p-3 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-xs font-semibold flex items-center justify-between">
-          <span>{pendingRateCount} entries still need a rate.</span>
-          {isOwner ? (
-            <button
-              onClick={() => onNavigateToRates && onNavigateToRates()}
-              className="underline font-bold text-amber-900 hover:text-amber-950"
-            >
-              Set Rates →
-            </button>
-          ) : (
-            <span className="text-slate-500 font-normal">Waiting for owner</span>
-          )}
-        </div>
-      )}
-
       {/* Procurement Slips Table */}
       <div className="light-card rounded-2xl overflow-hidden">
         {filteredEntries.length === 0 ? (
           <div className="p-8 text-center space-y-3">
             <p className="text-slate-500 text-xs font-medium">
-              No entries found for {activeBranch?.branch_name} on {fromDate === toDate ? fromDate : `${fromDate} to ${toDate}`}.
+              {statementMode === 'pending'
+                ? `No pending intake slips for ${activeBranch?.branch_name}. All slips have rates set!`
+                : statementMode === 'settled'
+                ? `No settled statements for ${activeBranch?.branch_name} on ${fromDate === toDate ? fromDate : `${fromDate} to ${toDate}`}.`
+                : `No entries found for ${activeBranch?.branch_name} on ${fromDate === toDate ? fromDate : `${fromDate} to ${toDate}`}.`}
             </p>
             {availableBranches && availableBranches.length > 1 && (
               <div className="flex flex-wrap justify-center gap-2 pt-1">
@@ -1007,21 +1082,23 @@ export default function StatementView({ onNavigateToRates, onNewEntry, onEditEnt
                       }`}
                     >
                       {needsRate ? (
-                        <div className="inline-flex flex-col items-end gap-1">
-                          <span className="text-amber-700 font-bold text-xs bg-amber-50 border border-amber-300 px-2 py-1 rounded-md inline-block">
-                            Rate Pending
-                          </span>
-                          {(isOwner || isBilling) && onNavigateToRates && (
+                        <div className="inline-flex flex-col items-end gap-1.5">
+                          {(isOwner || isBilling) && onNavigateToRates ? (
                             <button
                               type="button"
                               onClick={(ev) => {
                                 ev.stopPropagation();
                                 onNavigateToRates(e.id);
                               }}
-                              className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 hover:text-amber-900 underline"
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all active:scale-95"
                             >
-                              Set rate →
+                              <BadgeDollarSign className="w-3.5 h-3.5" />
+                              <span>Set Rate</span>
                             </button>
+                          ) : (
+                            <span className="text-amber-700 font-bold text-xs bg-amber-50 border border-amber-300 px-2 py-1 rounded-md inline-block">
+                              Rate Pending
+                            </span>
                           )}
                         </div>
                       ) : (
