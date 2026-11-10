@@ -20,22 +20,22 @@ export default function AppLayout({ children, activeTab, onSelectTab }) {
   }, []);
 
   return (
-    <div className="flex min-h-screen bg-slate-50 text-slate-800 overflow-x-hidden">
-      {/* Desktop Sidebar (>= 1024px) */}
+    <div className="flex h-screen w-screen overflow-hidden bg-slate-50 text-slate-800">
+      {/* Desktop Sidebar (>= 1024px) - Pinned 100% height */}
       <DesktopSidebar
         activeTab={activeTab}
         onSelectTab={onSelectTab}
         isOnline={isOnline}
       />
 
-      {/* Main View Area */}
-      <div className="flex-1 flex flex-col min-w-0">
+      {/* Main View Area - Independent Scroll Container */}
+      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto">
         {/* Mobile Header (< 1024px) */}
         <MobileTouchHeader isOnline={isOnline} />
 
         {/* Global Offline Warning Banner */}
         {!isOnline && (
-          <div className="bg-amber-100 border-b border-amber-300 text-amber-900 font-bold text-xs px-4 py-2 flex items-center justify-between">
+          <div className="bg-amber-100 border-b border-amber-300 text-amber-900 font-bold text-xs px-4 py-2 flex items-center justify-between shrink-0">
             <span>⚠️ Operating in Offline Mode. Masters and entries will use local IndexedDB cache.</span>
             <span className="text-[10px] bg-amber-200/80 px-2 py-0.5 rounded font-semibold">Auto-sync on reconnect</span>
           </div>

@@ -37,7 +37,7 @@ export default function DesktopSidebar({ activeTab, onSelectTab, isOnline = true
 
   // Navigation Items tailored per role matching the workflow prototype
   const navItems = [
-    // Staff Admin: Today & New Entry
+    // Staff Admin: Today & New Entry + Statement
     {
       id: 'today',
       label: 'Today',
@@ -50,14 +50,14 @@ export default function DesktopSidebar({ activeTab, onSelectTab, isOnline = true
       icon: PlusCircle,
       roles: ['staffAdmin'],
     },
-
-    // Owner: Statement, Set rate, Accounts
     {
       id: 'statement',
       label: 'Statement',
       icon: FileSpreadsheet,
-      roles: ['owner', 'billingAdmin'],
+      roles: ['owner', 'billingAdmin', 'staffAdmin'],
     },
+
+    // Owner: Set rate, Accounts
     {
       id: 'rates',
       label: 'Set rate',
@@ -72,7 +72,7 @@ export default function DesktopSidebar({ activeTab, onSelectTab, isOnline = true
       roles: ['owner'],
     },
 
-    // Billing Admin: Billing, Statement, Masters
+    // Billing Admin: Billing, Masters
     {
       id: 'billing',
       label: 'Billing',
@@ -99,14 +99,14 @@ export default function DesktopSidebar({ activeTab, onSelectTab, isOnline = true
   const filteredNavItems = navItems.filter((item) => item.roles.includes(role));
 
   return (
-    <aside className="hidden desktop:flex flex-col w-64 h-screen bg-white border-r border-slate-200 text-slate-800 select-none sticky top-0 shrink-0 shadow-sm">
+    <aside className="hidden desktop:flex flex-col w-64 h-full bg-white border-r border-slate-200 text-slate-800 select-none shrink-0 shadow-sm z-30">
       {/* Brand Header */}
-      <div className="p-5 border-b border-slate-200 bg-gradient-to-b from-slate-50 to-white">
+      <div className="p-5 border-b border-slate-200 bg-gradient-to-b from-slate-50 to-white shrink-0">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-amber-500 flex items-center justify-center shadow-md">
+          <div className="w-9 h-9 rounded-xl bg-amber-500 flex items-center justify-center shadow-md shrink-0">
             <Scale className="w-5 h-5 text-white stroke-[2.5]" />
           </div>
-          <div>
+          <div className="min-w-0">
             <h1 className="text-base font-black tracking-tight text-slate-900 flex items-center gap-1.5 leading-none">
               Daily Statement
             </h1>
@@ -151,7 +151,7 @@ export default function DesktopSidebar({ activeTab, onSelectTab, isOnline = true
       </div>
 
       {/* Main Navigation Items */}
-      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto min-h-0">
         <div className="px-3 pb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
           Menu
         </div>
@@ -186,8 +186,8 @@ export default function DesktopSidebar({ activeTab, onSelectTab, isOnline = true
         })}
       </nav>
 
-      {/* User Session Profile & Sign Out */}
-      <div className="p-3.5 border-t border-slate-200 bg-slate-50/70">
+      {/* User Session Profile & Sign Out - Permanently pinned at the bottom */}
+      <div className="p-3.5 border-t border-slate-200 bg-slate-50/70 shrink-0 mt-auto">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 overflow-hidden">
             <div className="w-8 h-8 rounded-full bg-amber-100 border border-amber-300 flex items-center justify-center font-bold text-amber-800 text-xs shrink-0">

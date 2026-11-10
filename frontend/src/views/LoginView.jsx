@@ -1,14 +1,15 @@
-import React, { useState } from 'react';
-import { Scale, Lock, User, AlertCircle, ShieldCheck } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Scale, Lock, User, AlertCircle, ShieldCheck, ArrowRight, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import NumericKeypad from '../components/common/NumericKeypad';
 
 export default function LoginView() {
-  const { login } = useAuth();
+  const { login, isLoading } = useAuth();
   const [username, setUsername] = useState('admin');
   const [pin, setPin] = useState('');
+  const [showPin, setShowPin] = useState(false);
   const [error, setError] = useState(null);
   const [remainingAttempts, setRemainingAttempts] = useState(null);
+  const pinInputRef = useRef(null);
 
   const quickUsers = [
     { name: 'admin', label: 'Owner / Director', role: 'Owner', pin: '1234' },
@@ -18,12 +19,17 @@ export default function LoginView() {
 
   const handleSelectQuickUser = (qu) => {
     setUsername(qu.name);
-    setPin('');
+    setPin(qu.pin);
     setError(null);
     setRemainingAttempts(null);
+    if (pinInputRef.current) {
+      pinInputRef.current.focus();
+    }
   };
 
-  const handleLoginSubmit = async () => {
+  const handleLoginSubmit = async (e) => {
+    if (e) e.preventDefault();
+
     if (!username) {
       setError('Please select or enter a username');
       return;
@@ -42,7 +48,16 @@ export default function LoginView() {
         setRemainingAttempts(result.remainingAttempts);
       }
       setPin('');
+      if (pinInputRef.current) {
+        pinInputRef.current.focus();
+      }
     }
+  };
+
+  const handlePinChange = (e) => {
+    const val = e.target.value.replace(/\D/g, '').slice(0, 4);
+    setPin(val);
+    setError(null);
   };
 
   return (
@@ -60,108 +75,135 @@ export default function LoginView() {
             </span>
           </h1>
           <p className="text-xs text-slate-500 mt-1 font-medium">
-            Indo Fish Meal & Oil Co. Pvt. Ltd. | Secure Access
+            Indo Fish Meal &amp; Oil Co. Pvt. Ltd. | Secure Access
           </p>
         </div>
 
         {/* Main Login Card */}
         <div className="bg-white rounded-3xl p-6 sm:p-7 shadow-sm border border-slate-200">
-          {/* Quick Role Selection Chips */}
-          <div className="mb-5">
-            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-2 text-center">
-              Select Operator Profile
-            </label>
-            <div className="grid grid-cols-3 gap-2">
-              {quickUsers.map((qu) => {
-                const isSelected = username === qu.name;
-                return (
-                  <button
-                    key={qu.name}
-                    type="button"
-                    onClick={() => handleSelectQuickUser(qu)}
-                    className={`py-2 px-2 rounded-xl text-center transition-all touch-key border ${
-                      isSelected
-                        ? 'bg-amber-50 border-amber-400 text-amber-900 font-bold shadow-sm'
-                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    <div className="text-xs font-bold truncate">{qu.label}</div>
-                    <div className="text-[10px] text-slate-400 truncate font-mono mt-0.5">PIN: {qu.pin}</div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Username Input if custom */}
-          <div className="mb-4">
-            <div className="relative">
-              <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Username"
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-sm font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:border-amber-500 shadow-sm"
-              />
-            </div>
-          </div>
-
-          {/* PIN Display & Masked Dots */}
-          <div className="mb-4">
-            <div className="flex justify-between items-center mb-1.5 px-1">
-              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                Enter 4-Digit Security PIN
-              </span>
-              <span className="text-[10px] text-amber-700 font-semibold flex items-center gap-1">
-                <Lock className="w-3 h-3" /> Encrypted
-              </span>
-            </div>
-
-            <div className="h-14 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-center gap-4 px-4 shadow-inner">
-              {[0, 1, 2, 3].map((index) => {
-                const hasDigit = pin.length > index;
-                return (
-                  <div
-                    key={index}
-                    className={`w-3.5 h-3.5 rounded-full transition-all duration-150 ${
-                      hasDigit
-                        ? 'bg-amber-500 scale-125 shadow-sm'
-                        : 'border-2 border-slate-300 bg-slate-200'
-                    }`}
-                  />
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Error & Lockout Message */}
-          {error && (
-            <div className="mb-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start gap-2.5">
-              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-              <div>
-                <p className="font-semibold">{error}</p>
-                {remainingAttempts !== null && (
-                  <p className="text-[11px] text-rose-600 mt-0.5 font-medium">
-                    Remaining attempts before temporary 15-min lockout: {remainingAttempts}
-                  </p>
-                )}
+          <form onSubmit={handleLoginSubmit} className="space-y-4">
+            {/* Quick Role Selection Chips */}
+            <div>
+              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-2 text-center">
+                Select Operator Profile
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {quickUsers.map((qu) => {
+                  const isSelected = username === qu.name;
+                  return (
+                    <button
+                      key={qu.name}
+                      type="button"
+                      onClick={() => handleSelectQuickUser(qu)}
+                      className={`py-2 px-2 rounded-xl text-center transition-all touch-key border ${
+                        isSelected
+                          ? 'bg-amber-50 border-amber-400 text-amber-900 font-bold shadow-sm'
+                          : 'bg-slate-50 border-slate-200 text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      <div className="text-xs font-bold truncate">{qu.label}</div>
+                      <div className="text-[10px] text-slate-400 truncate font-mono mt-0.5">PIN: {qu.pin}</div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
-          )}
 
-          {/* On-Screen Touch Numeric Keypad */}
-          <NumericKeypad
-            value={pin}
-            onChange={(newPin) => {
-              if (newPin.length <= 4) {
-                setPin(newPin);
-              }
-            }}
-            onDone={handleLoginSubmit}
-            onClear={() => setPin('')}
-            allowDecimal={false}
-          />
+            {/* Username Input */}
+            <div>
+              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                Username
+              </label>
+              <div className="relative">
+                <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                <input
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="Username"
+                  autoComplete="username"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-sm font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:border-amber-500 shadow-sm"
+                />
+              </div>
+            </div>
+
+            {/* 4-Digit Security PIN (Uses native phone & system keypad) */}
+            <div>
+              <div className="flex justify-between items-center mb-1">
+                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                  4-Digit Security PIN
+                </label>
+                <span className="text-[10px] text-amber-700 font-semibold flex items-center gap-1">
+                  <Lock className="w-3 h-3" /> Encrypted
+                </span>
+              </div>
+
+              <div className="relative">
+                <input
+                  ref={pinInputRef}
+                  type={showPin ? 'text' : 'password'}
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={4}
+                  value={pin}
+                  onChange={handlePinChange}
+                  placeholder="• • • •"
+                  autoComplete="current-password"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-center text-xl font-mono font-black tracking-widest text-slate-900 placeholder:text-slate-300 focus:outline-none focus:border-amber-500 focus:bg-white shadow-sm transition-all"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPin((prev) => !prev)}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-1"
+                  tabIndex={-1}
+                  title={showPin ? 'Hide PIN' : 'Show PIN'}
+                >
+                  {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+
+              {/* Visual Indicator Dots */}
+              <div className="flex justify-center items-center gap-3 mt-2">
+                {[0, 1, 2, 3].map((idx) => (
+                  <div
+                    key={idx}
+                    className={`w-2.5 h-2.5 rounded-full transition-all duration-150 ${
+                      pin.length > idx
+                        ? 'bg-amber-500 scale-125'
+                        : 'bg-slate-200 border border-slate-300'
+                    }`}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Error & Lockout Message */}
+            {error && (
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start gap-2.5">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold">{error}</p>
+                  {remainingAttempts !== null && (
+                    <p className="text-[11px] text-rose-600 mt-0.5 font-medium">
+                      Remaining attempts before temporary 15-min lockout: {remainingAttempts}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Submit Button */}
+            <div className="pt-2">
+              <button
+                type="submit"
+                disabled={isLoading || !pin || pin.length < 4}
+                className="w-full py-3.5 px-4 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white font-bold rounded-2xl shadow-md transition-all flex items-center justify-center gap-2 text-sm touch-key"
+              >
+                <span>{isLoading ? 'Verifying...' : 'Sign In'}</span>
+                <ArrowRight className="w-4 h-4 stroke-[2.5]" />
+              </button>
+            </div>
+          </form>
         </div>
 
         {/* Security Footer */}

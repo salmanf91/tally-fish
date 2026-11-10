@@ -13,6 +13,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { useBranch } from '../context/BranchContext';
+import SearchableSelect from '../components/common/SearchableSelect';
 import {
   useParties,
   useVehicles,
@@ -414,47 +415,46 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
           />
         </div>
 
-        {/* Party / Vendor Search & Quick Chips */}
+        {/* Party / Vendor Select Search Dropdown */}
         <div className="light-card p-4 rounded-2xl space-y-2.5">
-          <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block">
-            Party / Vendor · Required
-          </label>
-          <input
-            type="text"
-            maxLength={100}
-            placeholder="Search or type vendor name"
+          <SearchableSelect
+            label="Party / Vendor"
+            required
             value={partySearch}
-            onChange={(e) => setPartySearch(e.target.value.toUpperCase())}
-            className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-900 focus:outline-none focus:border-amber-500"
+            onChange={(val) => setPartySearch(val)}
+            options={partiesList.map((p) => ({
+              value: p.name,
+              label: p.name,
+              subtext: p.code ? `Code: ${p.code}` : undefined,
+            }))}
+            placeholder="Search or select vendor / client..."
+            error={
+              partySearch.trim() && !partyExists
+                ? `Vendor "${partySearch.trim()}" does not exist in master data. Billing staff must add this vendor first.`
+                : null
+            }
           />
 
-          {/* Chips strictly from DB */}
-          <div className="flex flex-wrap gap-1.5 pt-1 max-h-32 overflow-y-auto">
-            {filteredParties.map((pName) => {
-              const isSelected = partySearch === pName;
-              return (
-                <button
-                  key={pName}
-                  type="button"
-                  onClick={() => setPartySearch(pName)}
-                  className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition-all ${isSelected
-                      ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
-                      : 'bg-white text-slate-700 border-slate-300 hover:border-slate-400'
+          {/* Quick Recent Chips strictly from DB */}
+          {partiesList.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 pt-1 max-h-24 overflow-y-auto">
+              {partiesList.slice(0, 6).map((p) => {
+                const isSelected = partySearch === p.name;
+                return (
+                  <button
+                    key={p.id || p.name}
+                    type="button"
+                    onClick={() => setPartySearch(p.name)}
+                    className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition-all ${
+                      isSelected
+                        ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
+                        : 'bg-white text-slate-700 border-slate-300 hover:border-slate-400'
                     }`}
-                >
-                  {pName}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Error when typed vendor is not in database */}
-          {partySearch.trim() && !partyExists && (
-            <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
-              <span>
-                Vendor "{partySearch.trim()}" does not exist in master data. Billing staff must add this vendor first.
-              </span>
+                  >
+                    {p.name}
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
@@ -593,12 +593,37 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
             </div>
           )}
 
-          {/* Add Fish Species Chips */}
-          <div className="pt-2">
-            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-              Tap to Add Fish
+          {/* Add Fish Species Select Search Dropdown & Quick Chips */}
+          <div className="pt-2 space-y-2">
+            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
+              <span>Select or Add Fish Species</span>
+              {mixTargetIndex !== null && (
+                <span className="text-amber-700 font-semibold text-[10px] normal-case">
+                  Mixing into Box #{mixTargetIndex + 1}
+                </span>
+              )}
             </div>
-            <div className="flex flex-wrap gap-1.5">
+
+            {/* Fish Searchable Select Dropdown */}
+            <SearchableSelect
+              value=""
+              onChange={(selectedFish) => {
+                if (selectedFish) {
+                  handleAddFish(selectedFish);
+                }
+              }}
+              options={fishTypesList.map((f) => ({
+                value: f.name,
+                label: f.name,
+                subtext: f.code ? `Code: ${f.code}${f.default_rate ? ` · ₹${f.default_rate}/kg` : ''}` : undefined,
+              }))}
+              placeholder="Search or select fish species..."
+              customActionLabel="Other… (Custom Species)"
+              onCustomAction={() => setShowOtherInput(true)}
+            />
+
+            {/* Quick Fish Chips for fast 1-tap entry */}
+            <div className="flex flex-wrap gap-1.5 pt-1">
               {dynamicFishChips.map((chip) => (
                 <button
                   key={chip}
@@ -752,50 +777,47 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
             />
           </div>
 
-          {/* Vehicle No */}
+          {/* Vehicle No Select Search Dropdown */}
           <div className="sm:col-span-2">
-            <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
-              Vehicle No · Required
-            </label>
-            <input
-              type="text"
-              maxLength={30}
-              placeholder="e.g. KL 59Z 5206"
+            <SearchableSelect
+              label="Vehicle No"
+              required
               value={vehicleNo}
-              onChange={(e) => setVehicleNo(e.target.value.toUpperCase())}
-              className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm font-mono font-bold uppercase text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
+              onChange={(val) => setVehicleNo(val)}
+              options={vehiclesList.map((v) => ({
+                value: v.vehicle_no,
+                label: v.vehicle_no,
+                subtext: v.driver_name ? `Driver: ${v.driver_name}` : undefined,
+              }))}
+              placeholder="Search or select vehicle..."
+              error={
+                vehicleNo.trim() && !vehicleExists
+                  ? `Vehicle "${vehicleNo.trim()}" does not exist in master records. Billing staff must register this vehicle first.`
+                  : null
+              }
             />
+
+            {/* Quick Recent Vehicles strictly from Masters DB */}
+            {dynamicVehicleChips.length > 0 && (
+              <div className="flex gap-1.5 overflow-x-auto pt-2">
+                {dynamicVehicleChips.map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => setVehicleNo(v)}
+                    className={`text-[11px] font-mono font-bold px-2.5 py-1 rounded-lg border whitespace-nowrap ${
+                      vehicleNo === v
+                        ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
+                        : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    {v}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
-
-        {/* Quick Recent Vehicles strictly from Masters DB */}
-        {dynamicVehicleChips.length > 0 && (
-          <div className="flex gap-1.5 overflow-x-auto pt-1">
-            {dynamicVehicleChips.map((v) => (
-              <button
-                key={v}
-                type="button"
-                onClick={() => setVehicleNo(v)}
-                className={`text-[11px] font-mono font-bold px-2.5 py-1 rounded-lg border whitespace-nowrap ${vehicleNo === v
-                  ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
-                  : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
-                  }`}
-              >
-                {v}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* Error if typed vehicle does not exist in DB */}
-        {vehicleNo.trim() && !vehicleExists && (
-          <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
-            <span>
-              Vehicle "{vehicleNo.trim()}" does not exist in master records. Billing staff must register this vehicle first.
-            </span>
-          </div>
-        )}
       </div>
 
       {/* Gross, Tare, Ice/Water Cards with Direct Keyboard Entry */}
