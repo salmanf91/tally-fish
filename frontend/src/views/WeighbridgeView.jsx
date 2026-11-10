@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, useQuery } from '@tanstack/react-query';
 import {
   Scale,
   Truck,
@@ -43,15 +43,87 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
   // Quick-save fish mutation when added via "Other..."
   const createFishTypeMutation = useCreateQuickFishType(activeBranchId);
 
-  // Dynamic quick-pick fish chips strictly from DB masters
-  const dynamicFishChips = useMemo(() => {
-    return fishTypesList.map((f) => f.name.toUpperCase());
-  }, [fishTypesList]);
+  // Fetch entries to calculate the top 5 most popular parties, fish species, and vehicles from real DB records
+  const { data: entriesList = [] } = useQuery({
+    queryKey: ['entries', activeBranchId],
+    queryFn: async () => {
+      const res = await api.get('/entries');
+      return res.data || [];
+    },
+    enabled: !!activeBranchId,
+  });
 
-  // Dynamic quick-pick vehicle chips strictly from DB masters
-  const dynamicVehicleChips = useMemo(() => {
-    return vehiclesList.map((v) => v.vehicle_no.toUpperCase());
-  }, [vehiclesList]);
+  // Top 5 Popular Parties from database entries (with fallback to DB masters)
+  const popularParties = useMemo(() => {
+    const counts = {};
+    entriesList.forEach((e) => {
+      if (e.party_name) {
+        const p = e.party_name.trim();
+        counts[p] = (counts[p] || 0) + 1;
+      }
+    });
+    const sorted = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+    const validDBParties = new Set(partiesList.map((p) => p.name.toUpperCase()));
+    const result = sorted.filter((name) => validDBParties.has(name.toUpperCase())).slice(0, 5);
+
+    for (const p of partiesList) {
+      if (result.length >= 5) break;
+      if (!result.includes(p.name)) {
+        result.push(p.name);
+      }
+    }
+    return result;
+  }, [entriesList, partiesList]);
+
+  // Top 5 Popular Fish species from database entries (with fallback to DB masters)
+  const popularFish = useMemo(() => {
+    const counts = {};
+    entriesList.forEach((e) => {
+      if (Array.isArray(e.boxes)) {
+        e.boxes.forEach((b) => {
+          if (b.fish_name) {
+            const f = b.fish_name.trim().toUpperCase();
+            counts[f] = (counts[f] || 0) + 1;
+          }
+        });
+      }
+    });
+    const sorted = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+    const validDBFish = new Set(fishTypesList.map((f) => f.name.toUpperCase()));
+    const result = sorted.filter((f) => validDBFish.has(f)).slice(0, 5);
+
+    for (const f of fishTypesList) {
+      if (result.length >= 5) break;
+      const u = f.name.toUpperCase();
+      if (!result.includes(u)) {
+        result.push(u);
+      }
+    }
+    return result;
+  }, [entriesList, fishTypesList]);
+
+  // Top 5 Popular Vehicles from database entries (with fallback to DB masters)
+  const popularVehicles = useMemo(() => {
+    const counts = {};
+    entriesList.forEach((e) => {
+      if (e.vehicle_no) {
+        const v = e.vehicle_no.trim().toUpperCase();
+        counts[v] = (counts[v] || 0) + 1;
+      }
+    });
+    const sorted = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+    const validDBVehicles = new Set(vehiclesList.map((v) => v.vehicle_no.toUpperCase()));
+    const result = sorted.filter((v) => validDBVehicles.has(v)).slice(0, 5);
+
+    for (const v of vehiclesList) {
+      if (result.length >= 5) break;
+      const u = v.vehicle_no.toUpperCase();
+      if (!result.includes(u)) {
+        result.push(u);
+      }
+    }
+    return result;
+  }, [entriesList, vehiclesList]);
 
   // Workflow Step: 'fish' (Step 1: Fish & Remarks) | 'weights' (Step 2: Vehicle & Weights)
   const [step, setStep] = useState('fish');
@@ -435,26 +507,31 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
             }
           />
 
-          {/* Quick Recent Chips strictly from DB */}
-          {partiesList.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 pt-1 max-h-24 overflow-y-auto">
-              {partiesList.slice(0, 6).map((p) => {
-                const isSelected = partySearch === p.name;
-                return (
-                  <button
-                    key={p.id || p.name}
-                    type="button"
-                    onClick={() => setPartySearch(p.name)}
-                    className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition-all ${
-                      isSelected
-                        ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
-                        : 'bg-white text-slate-700 border-slate-300 hover:border-slate-400'
-                    }`}
-                  >
-                    {p.name}
-                  </button>
-                );
-              })}
+          {/* 5 Popular Client / Vendor Chips strictly from DB */}
+          {popularParties.length > 0 && (
+            <div className="pt-0.5">
+              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                ★ 5 Popular Vendors
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {popularParties.map((pName) => {
+                  const isSelected = partySearch === pName;
+                  return (
+                    <button
+                      key={pName}
+                      type="button"
+                      onClick={() => setPartySearch(pName)}
+                      className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition-all ${
+                        isSelected
+                          ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
+                          : 'bg-white text-slate-700 border-slate-300 hover:border-slate-400'
+                      }`}
+                    >
+                      {pName}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>
@@ -622,26 +699,33 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
               onCustomAction={() => setShowOtherInput(true)}
             />
 
-            {/* Quick Fish Chips for fast 1-tap entry */}
-            <div className="flex flex-wrap gap-1.5 pt-1">
-              {dynamicFishChips.map((chip) => (
-                <button
-                  key={chip}
-                  type="button"
-                  onClick={() => handleAddFish(chip)}
-                  className="touch-key text-xs font-bold px-3 py-1.5 rounded-xl bg-white border border-slate-300 text-slate-800 hover:bg-slate-50 active:bg-slate-100 shadow-sm"
-                >
-                  {chip}
-                </button>
-              ))}
-              <button
-                type="button"
-                onClick={() => setShowOtherInput(!showOtherInput)}
-                className="touch-key text-xs font-semibold px-3 py-1.5 rounded-xl border border-dashed border-slate-300 text-slate-600 hover:border-amber-400 hover:text-amber-800 transition-all"
-              >
-                Other…
-              </button>
-            </div>
+            {/* 5 Popular Fish Species Chips strictly from DB */}
+            {popularFish.length > 0 && (
+              <div className="pt-0.5">
+                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                  ★ 5 Popular Species
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {popularFish.map((chip) => (
+                    <button
+                      key={chip}
+                      type="button"
+                      onClick={() => handleAddFish(chip)}
+                      className="touch-key text-xs font-bold px-3 py-1.5 rounded-xl bg-white border border-slate-300 text-slate-800 hover:bg-slate-50 active:bg-slate-100 shadow-sm"
+                    >
+                      {chip}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setShowOtherInput(!showOtherInput)}
+                    className="touch-key text-xs font-semibold px-3 py-1.5 rounded-xl border border-dashed border-slate-300 text-slate-600 hover:border-amber-400 hover:text-amber-800 transition-all"
+                  >
+                    Other…
+                  </button>
+                </div>
+              </div>
+            )}
 
             {showOtherInput && (
               <div className="flex gap-2 mt-2">
@@ -797,23 +881,28 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
               }
             />
 
-            {/* Quick Recent Vehicles strictly from Masters DB */}
-            {dynamicVehicleChips.length > 0 && (
-              <div className="flex gap-1.5 overflow-x-auto pt-2">
-                {dynamicVehicleChips.map((v) => (
-                  <button
-                    key={v}
-                    type="button"
-                    onClick={() => setVehicleNo(v)}
-                    className={`text-[11px] font-mono font-bold px-2.5 py-1 rounded-lg border whitespace-nowrap ${
-                      vehicleNo === v
-                        ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
-                        : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
-                    }`}
-                  >
-                    {v}
-                  </button>
-                ))}
+            {/* 5 Popular Vehicles strictly from DB */}
+            {popularVehicles.length > 0 && (
+              <div className="pt-2">
+                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                  ★ 5 Popular Vehicles
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {popularVehicles.map((v) => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => setVehicleNo(v)}
+                      className={`text-[11px] font-mono font-bold px-2.5 py-1 rounded-lg border whitespace-nowrap ${
+                        vehicleNo === v
+                          ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
+                          : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      {v}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
           </div>

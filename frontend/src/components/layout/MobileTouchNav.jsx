@@ -19,12 +19,14 @@ export default function MobileTouchNav({ activeTab, onSelectTab }) {
     tabs = [
       { id: 'statement', label: 'Statement', icon: FileSpreadsheet },
       { id: 'rates', label: 'Set rate', icon: BadgeDollarSign },
+      { id: 'new', label: 'New entry', icon: PlusCircle },
       { id: 'accounts', label: 'Accounts', icon: UserCheck },
     ];
   } else if (currentRole === 'billingAdmin') {
     tabs = [
       { id: 'billing', label: 'Billing', icon: Layers },
       { id: 'statement', label: 'Statement', icon: FileSpreadsheet },
+      { id: 'new', label: 'New entry', icon: PlusCircle },
       { id: 'masters', label: 'Masters', icon: Users },
     ];
   } else {

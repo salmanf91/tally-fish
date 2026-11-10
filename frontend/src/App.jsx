@@ -113,11 +113,23 @@ function MainApp() {
           onEntryCreated={() => {
             queryClient.invalidateQueries({ queryKey: ['entries'] });
             setEditingEntry(null);
-            setActiveTab('today');
+            if (currentRole === 'owner') {
+              setActiveTab('statement');
+            } else if (currentRole === 'billingAdmin') {
+              setActiveTab('statement');
+            } else {
+              setActiveTab('today');
+            }
           }}
           onCancel={() => {
             setEditingEntry(null);
-            setActiveTab('today');
+            if (currentRole === 'owner') {
+              setActiveTab('statement');
+            } else if (currentRole === 'billingAdmin') {
+              setActiveTab('statement');
+            } else {
+              setActiveTab('today');
+            }
           }}
         />
       )}
@@ -128,6 +140,14 @@ function MainApp() {
           onNavigateToRates={(id) => {
             setSelectedRateEntryId(id || null);
             setActiveTab('rates');
+          }}
+          onNewEntry={() => {
+            setEditingEntry(null);
+            setActiveTab('new');
+          }}
+          onEditEntry={(entry) => {
+            setEditingEntry(entry);
+            setActiveTab('new');
           }}
         />
       )}
@@ -154,6 +174,14 @@ function MainApp() {
           onEditRates={(id) => {
             setSelectedRateEntryId(id);
             setActiveTab('rates');
+          }}
+          onNewEntry={() => {
+            setEditingEntry(null);
+            setActiveTab('new');
+          }}
+          onEditEntry={(entry) => {
+            setEditingEntry(entry);
+            setActiveTab('new');
           }}
         />
       )}

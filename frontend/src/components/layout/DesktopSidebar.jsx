@@ -37,7 +37,7 @@ export default function DesktopSidebar({ activeTab, onSelectTab, isOnline = true
 
   // Navigation Items tailored per role matching the workflow prototype
   const navItems = [
-    // Staff Admin: Today & New Entry + Statement
+    // All roles: New Entry & Statement
     {
       id: 'today',
       label: 'Today',
@@ -48,7 +48,7 @@ export default function DesktopSidebar({ activeTab, onSelectTab, isOnline = true
       id: 'new',
       label: 'New entry',
       icon: PlusCircle,
-      roles: ['staffAdmin'],
+      roles: ['owner', 'billingAdmin', 'staffAdmin'],
     },
     {
       id: 'statement',

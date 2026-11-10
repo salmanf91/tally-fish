@@ -14,6 +14,7 @@ import {
   Copy,
   Check,
   Edit3,
+  Plus,
 } from 'lucide-react';
 import { useBranch } from '../context/BranchContext';
 import { useAuth } from '../context/AuthContext';
@@ -132,7 +133,7 @@ export function getEntryLots(entry) {
   });
 }
 
-export default function StatementView({ onNavigateToRates }) {
+export default function StatementView({ onNavigateToRates, onNewEntry, onEditEntry }) {
   const { activeBranchId, activeBranch, availableBranches, setActiveBranchId } = useBranch();
   const { user } = useAuth();
 
@@ -713,14 +714,25 @@ export default function StatementView({ onNavigateToRates }) {
           </p>
         </div>
 
-        <button
-          onClick={() => refetch()}
-          disabled={isFetching}
-          className="p-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50"
-          title="Refresh"
-        >
-          <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin text-amber-600' : ''}`} />
-        </button>
+        <div className="flex items-center gap-2">
+          {onNewEntry && (
+            <button
+              onClick={onNewEntry}
+              className="text-xs font-bold px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white flex items-center gap-1 shadow-sm transition-all"
+            >
+              <Plus className="w-4 h-4" />
+              <span>New Entry</span>
+            </button>
+          )}
+          <button
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="p-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50"
+            title="Refresh"
+          >
+            <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin text-amber-600' : ''}`} />
+          </button>
+        </div>
       </div>
 
       {toastMessage && (
@@ -913,9 +925,20 @@ export default function StatementView({ onNavigateToRates }) {
                     </td>
                     <td className="py-3 px-3">
                       <strong className="text-slate-900 block text-sm">{e.party_name}</strong>
-                      <span className="text-slate-500 font-mono text-[11px]">
+                      <span className="text-slate-500 font-mono text-[11px] block">
                         {e.vehicle_no || 'Weights pending'}
                       </span>
+                      {onEditEntry && (
+                        <button
+                          type="button"
+                          onClick={() => onEditEntry(e)}
+                          className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-amber-800 transition-colors mt-0.5"
+                          title="Edit intake slip details (boxes, weights, vehicle)"
+                        >
+                          <Edit3 className="w-2.5 h-2.5" />
+                          <span>Edit entry</span>
+                        </button>
+                      )}
                     </td>
                     <td className="py-3 px-3 text-right font-mono font-bold text-slate-800">
                       {Number(e.net_kg).toLocaleString()}
