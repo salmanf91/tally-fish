@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, useQuery } from '@tanstack/react-query';
 import {
   Scale,
   Truck,
@@ -13,6 +13,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { useBranch } from '../context/BranchContext';
+import SearchableSelect from '../components/common/SearchableSelect';
 import {
   useParties,
   useVehicles,
@@ -42,15 +43,87 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
   // Quick-save fish mutation when added via "Other..."
   const createFishTypeMutation = useCreateQuickFishType(activeBranchId);
 
-  // Dynamic quick-pick fish chips strictly from DB masters
-  const dynamicFishChips = useMemo(() => {
-    return fishTypesList.map((f) => f.name.toUpperCase());
-  }, [fishTypesList]);
+  // Fetch entries to calculate the top 5 most popular parties, fish species, and vehicles from real DB records
+  const { data: entriesList = [] } = useQuery({
+    queryKey: ['entries', activeBranchId],
+    queryFn: async () => {
+      const res = await api.get('/entries');
+      return res.data || [];
+    },
+    enabled: !!activeBranchId,
+  });
 
-  // Dynamic quick-pick vehicle chips strictly from DB masters
-  const dynamicVehicleChips = useMemo(() => {
-    return vehiclesList.map((v) => v.vehicle_no.toUpperCase());
-  }, [vehiclesList]);
+  // Top 5 Popular Parties from database entries (with fallback to DB masters)
+  const popularParties = useMemo(() => {
+    const counts = {};
+    entriesList.forEach((e) => {
+      if (e.party_name) {
+        const p = e.party_name.trim();
+        counts[p] = (counts[p] || 0) + 1;
+      }
+    });
+    const sorted = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+    const validDBParties = new Set(partiesList.map((p) => p.name.toUpperCase()));
+    const result = sorted.filter((name) => validDBParties.has(name.toUpperCase())).slice(0, 5);
+
+    for (const p of partiesList) {
+      if (result.length >= 5) break;
+      if (!result.includes(p.name)) {
+        result.push(p.name);
+      }
+    }
+    return result;
+  }, [entriesList, partiesList]);
+
+  // Top 5 Popular Fish species from database entries (with fallback to DB masters)
+  const popularFish = useMemo(() => {
+    const counts = {};
+    entriesList.forEach((e) => {
+      if (Array.isArray(e.boxes)) {
+        e.boxes.forEach((b) => {
+          if (b.fish_name) {
+            const f = b.fish_name.trim().toUpperCase();
+            counts[f] = (counts[f] || 0) + 1;
+          }
+        });
+      }
+    });
+    const sorted = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+    const validDBFish = new Set(fishTypesList.map((f) => f.name.toUpperCase()));
+    const result = sorted.filter((f) => validDBFish.has(f)).slice(0, 5);
+
+    for (const f of fishTypesList) {
+      if (result.length >= 5) break;
+      const u = f.name.toUpperCase();
+      if (!result.includes(u)) {
+        result.push(u);
+      }
+    }
+    return result;
+  }, [entriesList, fishTypesList]);
+
+  // Top 5 Popular Vehicles from database entries (with fallback to DB masters)
+  const popularVehicles = useMemo(() => {
+    const counts = {};
+    entriesList.forEach((e) => {
+      if (e.vehicle_no) {
+        const v = e.vehicle_no.trim().toUpperCase();
+        counts[v] = (counts[v] || 0) + 1;
+      }
+    });
+    const sorted = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+    const validDBVehicles = new Set(vehiclesList.map((v) => v.vehicle_no.toUpperCase()));
+    const result = sorted.filter((v) => validDBVehicles.has(v)).slice(0, 5);
+
+    for (const v of vehiclesList) {
+      if (result.length >= 5) break;
+      const u = v.vehicle_no.toUpperCase();
+      if (!result.includes(u)) {
+        result.push(u);
+      }
+    }
+    return result;
+  }, [entriesList, vehiclesList]);
 
   // Workflow Step: 'fish' (Step 1: Fish & Remarks) | 'weights' (Step 2: Vehicle & Weights)
   const [step, setStep] = useState('fish');
@@ -414,47 +487,51 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
           />
         </div>
 
-        {/* Party / Vendor Search & Quick Chips */}
+        {/* Party / Vendor Select Search Dropdown */}
         <div className="light-card p-4 rounded-2xl space-y-2.5">
-          <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block">
-            Party / Vendor · Required
-          </label>
-          <input
-            type="text"
-            maxLength={100}
-            placeholder="Search or type vendor name"
+          <SearchableSelect
+            label="Party / Vendor"
+            required
             value={partySearch}
-            onChange={(e) => setPartySearch(e.target.value.toUpperCase())}
-            className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-900 focus:outline-none focus:border-amber-500"
+            onChange={(val) => setPartySearch(val)}
+            options={partiesList.map((p) => ({
+              value: p.name,
+              label: p.name,
+              subtext: p.code ? `Code: ${p.code}` : undefined,
+            }))}
+            placeholder="Search or select vendor / client..."
+            error={
+              partySearch.trim() && !partyExists
+                ? `Vendor "${partySearch.trim()}" does not exist in master data. Billing staff must add this vendor first.`
+                : null
+            }
           />
 
-          {/* Chips strictly from DB */}
-          <div className="flex flex-wrap gap-1.5 pt-1 max-h-32 overflow-y-auto">
-            {filteredParties.map((pName) => {
-              const isSelected = partySearch === pName;
-              return (
-                <button
-                  key={pName}
-                  type="button"
-                  onClick={() => setPartySearch(pName)}
-                  className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition-all ${isSelected
-                      ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
-                      : 'bg-white text-slate-700 border-slate-300 hover:border-slate-400'
-                    }`}
-                >
-                  {pName}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Error when typed vendor is not in database */}
-          {partySearch.trim() && !partyExists && (
-            <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
-              <span>
-                Vendor "{partySearch.trim()}" does not exist in master data. Billing staff must add this vendor first.
-              </span>
+          {/* 5 Popular Client / Vendor Chips strictly from DB */}
+          {popularParties.length > 0 && (
+            <div className="pt-0.5">
+              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                ★ 5 Popular Vendors
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {popularParties.map((pName) => {
+                  const isSelected = partySearch === pName;
+                  return (
+                    <button
+                      key={pName}
+                      type="button"
+                      onClick={() => setPartySearch(pName)}
+                      className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition-all ${
+                        isSelected
+                          ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
+                          : 'bg-white text-slate-700 border-slate-300 hover:border-slate-400'
+                      }`}
+                    >
+                      {pName}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>
@@ -593,30 +670,62 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
             </div>
           )}
 
-          {/* Add Fish Species Chips */}
-          <div className="pt-2">
-            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-              Tap to Add Fish
+          {/* Add Fish Species Select Search Dropdown & Quick Chips */}
+          <div className="pt-2 space-y-2">
+            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
+              <span>Select or Add Fish Species</span>
+              {mixTargetIndex !== null && (
+                <span className="text-amber-700 font-semibold text-[10px] normal-case">
+                  Mixing into Box #{mixTargetIndex + 1}
+                </span>
+              )}
             </div>
-            <div className="flex flex-wrap gap-1.5">
-              {dynamicFishChips.map((chip) => (
-                <button
-                  key={chip}
-                  type="button"
-                  onClick={() => handleAddFish(chip)}
-                  className="touch-key text-xs font-bold px-3 py-1.5 rounded-xl bg-white border border-slate-300 text-slate-800 hover:bg-slate-50 active:bg-slate-100 shadow-sm"
-                >
-                  {chip}
-                </button>
-              ))}
-              <button
-                type="button"
-                onClick={() => setShowOtherInput(!showOtherInput)}
-                className="touch-key text-xs font-semibold px-3 py-1.5 rounded-xl border border-dashed border-slate-300 text-slate-600 hover:border-amber-400 hover:text-amber-800 transition-all"
-              >
-                Other…
-              </button>
-            </div>
+
+            {/* Fish Searchable Select Dropdown */}
+            <SearchableSelect
+              value=""
+              onChange={(selectedFish) => {
+                if (selectedFish) {
+                  handleAddFish(selectedFish);
+                }
+              }}
+              options={fishTypesList.map((f) => ({
+                value: f.name,
+                label: f.name,
+                subtext: f.code ? `Code: ${f.code}${f.default_rate ? ` · ₹${f.default_rate}/kg` : ''}` : undefined,
+              }))}
+              placeholder="Search or select fish species..."
+              customActionLabel="Other… (Custom Species)"
+              onCustomAction={() => setShowOtherInput(true)}
+            />
+
+            {/* 5 Popular Fish Species Chips strictly from DB */}
+            {popularFish.length > 0 && (
+              <div className="pt-0.5">
+                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                  ★ 5 Popular Species
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {popularFish.map((chip) => (
+                    <button
+                      key={chip}
+                      type="button"
+                      onClick={() => handleAddFish(chip)}
+                      className="touch-key text-xs font-bold px-3 py-1.5 rounded-xl bg-white border border-slate-300 text-slate-800 hover:bg-slate-50 active:bg-slate-100 shadow-sm"
+                    >
+                      {chip}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setShowOtherInput(!showOtherInput)}
+                    className="touch-key text-xs font-semibold px-3 py-1.5 rounded-xl border border-dashed border-slate-300 text-slate-600 hover:border-amber-400 hover:text-amber-800 transition-all"
+                  >
+                    Other…
+                  </button>
+                </div>
+              </div>
+            )}
 
             {showOtherInput && (
               <div className="flex gap-2 mt-2">
@@ -752,50 +861,52 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
             />
           </div>
 
-          {/* Vehicle No */}
+          {/* Vehicle No Select Search Dropdown */}
           <div className="sm:col-span-2">
-            <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
-              Vehicle No · Required
-            </label>
-            <input
-              type="text"
-              maxLength={30}
-              placeholder="e.g. KL 59Z 5206"
+            <SearchableSelect
+              label="Vehicle No"
+              required
               value={vehicleNo}
-              onChange={(e) => setVehicleNo(e.target.value.toUpperCase())}
-              className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm font-mono font-bold uppercase text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
+              onChange={(val) => setVehicleNo(val)}
+              options={vehiclesList.map((v) => ({
+                value: v.vehicle_no,
+                label: v.vehicle_no,
+                subtext: v.driver_name ? `Driver: ${v.driver_name}` : undefined,
+              }))}
+              placeholder="Search or select vehicle..."
+              error={
+                vehicleNo.trim() && !vehicleExists
+                  ? `Vehicle "${vehicleNo.trim()}" does not exist in master records. Billing staff must register this vehicle first.`
+                  : null
+              }
             />
+
+            {/* 5 Popular Vehicles strictly from DB */}
+            {popularVehicles.length > 0 && (
+              <div className="pt-2">
+                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                  ★ 5 Popular Vehicles
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {popularVehicles.map((v) => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => setVehicleNo(v)}
+                      className={`text-[11px] font-mono font-bold px-2.5 py-1 rounded-lg border whitespace-nowrap ${
+                        vehicleNo === v
+                          ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
+                          : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      {v}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
-
-        {/* Quick Recent Vehicles strictly from Masters DB */}
-        {dynamicVehicleChips.length > 0 && (
-          <div className="flex gap-1.5 overflow-x-auto pt-1">
-            {dynamicVehicleChips.map((v) => (
-              <button
-                key={v}
-                type="button"
-                onClick={() => setVehicleNo(v)}
-                className={`text-[11px] font-mono font-bold px-2.5 py-1 rounded-lg border whitespace-nowrap ${vehicleNo === v
-                  ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
-                  : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
-                  }`}
-              >
-                {v}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* Error if typed vehicle does not exist in DB */}
-        {vehicleNo.trim() && !vehicleExists && (
-          <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
-            <span>
-              Vehicle "{vehicleNo.trim()}" does not exist in master records. Billing staff must register this vehicle first.
-            </span>
-          </div>
-        )}
       </div>
 
       {/* Gross, Tare, Ice/Water Cards with Direct Keyboard Entry */}

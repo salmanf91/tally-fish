@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { BadgeDollarSign, ChevronLeft, ChevronRight, CheckCircle2, Edit3, RefreshCw } from 'lucide-react';
+import { BadgeDollarSign, ChevronLeft, ChevronRight, CheckCircle2, Edit3, RefreshCw, Plus } from 'lucide-react';
 import { useBranch } from '../context/BranchContext';
 import { api } from '../services/api';
 
@@ -72,7 +72,7 @@ function getRateSummary(entry) {
   };
 }
 
-export default function BillingView({ onEditRates }) {
+export default function BillingView({ onEditRates, onNewEntry, onEditEntry }) {
   const { activeBranchId, activeBranch, availableBranches, setActiveBranchId } = useBranch();
 
   const [selectedDate, setSelectedDate] = useState(() => getLocalDateString());
@@ -113,6 +113,15 @@ export default function BillingView({ onEditRates }) {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {onNewEntry && (
+            <button
+              onClick={onNewEntry}
+              className="text-xs font-bold px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white flex items-center gap-1 shadow-sm transition-all"
+            >
+              <Plus className="w-4 h-4" />
+              <span>New Entry</span>
+            </button>
+          )}
           <button
             onClick={() => refetch()}
             title="Refresh"
@@ -120,9 +129,6 @@ export default function BillingView({ onEditRates }) {
           >
             <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin text-amber-600' : ''}`} />
           </button>
-          <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-blue-50 text-blue-800 border border-blue-200">
-            Billing Role
-          </span>
         </div>
       </div>
 
@@ -232,14 +238,27 @@ export default function BillingView({ onEditRates }) {
                   </div>
                 </div>
 
-                {/* Edit Rates Button for Billing Admin */}
-                <button
-                  type="button"
-                  onClick={() => onEditRates(entry.id)}
-                  className="w-full mt-2 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 font-bold text-xs hover:bg-slate-50 flex items-center justify-center gap-1.5 shadow-sm"
-                >
-                  <Edit3 className="w-3.5 h-3.5 text-slate-500" /> Edit Rates
-                </button>
+                {/* Action Buttons for Billing Admin */}
+                <div className="grid grid-cols-2 gap-2 mt-2">
+                  {onEditEntry && (
+                    <button
+                      type="button"
+                      onClick={() => onEditEntry(entry)}
+                      className="py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 font-bold text-xs hover:bg-slate-100 flex items-center justify-center gap-1.5 shadow-2xs transition-colors"
+                    >
+                      <Edit3 className="w-3.5 h-3.5 text-slate-500" /> Edit Slip
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => onEditRates(entry.id)}
+                    className={`py-2 rounded-xl bg-white border border-amber-300 text-amber-900 font-bold text-xs hover:bg-amber-50 flex items-center justify-center gap-1.5 shadow-2xs transition-colors ${
+                      !onEditEntry ? 'col-span-2' : ''
+                    }`}
+                  >
+                    <BadgeDollarSign className="w-3.5 h-3.5 text-amber-600" /> Edit Rates
+                  </button>
+                </div>
               </div>
             );
           })}

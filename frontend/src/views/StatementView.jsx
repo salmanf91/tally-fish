@@ -14,10 +14,12 @@ import {
   Copy,
   Check,
   Edit3,
+  Plus,
 } from 'lucide-react';
 import { useBranch } from '../context/BranchContext';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
+import { getOfflineRateFixes } from '../services/db';
 
 const CLIENT_PHONES = {
   AMR: '+91 98450 10001',
@@ -132,7 +134,7 @@ export function getEntryLots(entry) {
   });
 }
 
-export default function StatementView({ onNavigateToRates }) {
+export default function StatementView({ onNavigateToRates, onNewEntry, onEditEntry }) {
   const { activeBranchId, activeBranch, availableBranches, setActiveBranchId } = useBranch();
   const { user } = useAuth();
 
@@ -161,6 +163,26 @@ export default function StatementView({ onNavigateToRates }) {
   const [shareFormat, setShareFormat] = useState('Excel');
   const [sharePhone, setSharePhone] = useState('');
   const [toastMessage, setToastMessage] = useState('');
+  const [offlineRateFixes, setOfflineRateFixes] = useState([]);
+
+  // Load offline rate fixes from IndexedDB
+  useEffect(() => {
+    const loadOfflineRates = async () => {
+      try {
+        const list = await getOfflineRateFixes();
+        setOfflineRateFixes(list || []);
+      } catch (err) {
+        console.warn('[StatementView] Failed to load offline rate fixes:', err);
+      }
+    };
+    loadOfflineRates();
+    window.addEventListener('tally:sync-complete', loadOfflineRates);
+    window.addEventListener('online', loadOfflineRates);
+    return () => {
+      window.removeEventListener('tally:sync-complete', loadOfflineRates);
+      window.removeEventListener('online', loadOfflineRates);
+    };
+  }, []);
 
   // Fetch entries
   const { data: allEntries = [], isLoading, refetch, isFetching } = useQuery({
@@ -173,9 +195,28 @@ export default function StatementView({ onNavigateToRates }) {
     refetchOnMount: 'always',
   });
 
+  // Merge offline-buffered rates with server entries
+  const combinedEntries = useMemo(() => {
+    if (!offlineRateFixes.length) return allEntries;
+    const rateFixMap = new Map(offlineRateFixes.map((rf) => [rf.entryId, rf]));
+
+    return allEntries.map((e) => {
+      const offlineRf = rateFixMap.get(e.id);
+      if (offlineRf) {
+        return {
+          ...e,
+          status: 'LOCKED',
+          rates: offlineRf.rates,
+          isOfflinePending: true,
+        };
+      }
+      return e;
+    });
+  }, [allEntries, offlineRateFixes]);
+
   // Filter entries
   const filteredEntries = useMemo(() => {
-    return allEntries.filter((e) => {
+    return combinedEntries.filter((e) => {
       const d = e.entry_date ? e.entry_date.split('T')[0] : '';
       if (d < fromDate || d > toDate) return false;
       if (selectedParty && e.party_name !== selectedParty) return false;
@@ -188,7 +229,7 @@ export default function StatementView({ onNavigateToRates }) {
       }
       return true;
     });
-  }, [allEntries, fromDate, toDate, selectedParty, statusFilter, searchQuery]);
+  }, [combinedEntries, fromDate, toDate, selectedParty, statusFilter, searchQuery]);
 
   // Statistics
   const totalNetKg = useMemo(() => {
@@ -713,15 +754,39 @@ export default function StatementView({ onNavigateToRates }) {
           </p>
         </div>
 
-        <button
-          onClick={() => refetch()}
-          disabled={isFetching}
-          className="p-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50"
-          title="Refresh"
-        >
-          <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin text-amber-600' : ''}`} />
-        </button>
+        <div className="flex items-center gap-2">
+          {onNewEntry && (
+            <button
+              onClick={onNewEntry}
+              className="text-xs font-bold px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white flex items-center gap-1 shadow-sm transition-all"
+            >
+              <Plus className="w-4 h-4" />
+              <span>New Entry</span>
+            </button>
+          )}
+          <button
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="p-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50"
+            title="Refresh"
+          >
+            <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin text-amber-600' : ''}`} />
+          </button>
+        </div>
       </div>
+
+      {/* Offline Rate Fixes Indicator Banner */}
+      {offlineRateFixes.length > 0 && (
+        <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-xs font-semibold flex items-center justify-between shadow-2xs">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+            <span>
+              <strong>{offlineRateFixes.length} rate fix{offlineRateFixes.length > 1 ? 'es' : ''}</strong> saved locally in offline buffer.
+            </span>
+          </div>
+          <span className="text-[10px] bg-amber-200/80 px-2 py-0.5 rounded font-bold">Auto-syncing on reconnect</span>
+        </div>
+      )}
 
       {toastMessage && (
         <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-bold">
@@ -913,9 +978,20 @@ export default function StatementView({ onNavigateToRates }) {
                     </td>
                     <td className="py-3 px-3">
                       <strong className="text-slate-900 block text-sm">{e.party_name}</strong>
-                      <span className="text-slate-500 font-mono text-[11px]">
+                      <span className="text-slate-500 font-mono text-[11px] block">
                         {e.vehicle_no || 'Weights pending'}
                       </span>
+                      {onEditEntry && (
+                        <button
+                          type="button"
+                          onClick={() => onEditEntry(e)}
+                          className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-amber-800 transition-colors mt-0.5"
+                          title="Edit intake slip details (boxes, weights, vehicle)"
+                        >
+                          <Edit3 className="w-2.5 h-2.5" />
+                          <span>Edit entry</span>
+                        </button>
+                      )}
                     </td>
                     <td className="py-3 px-3 text-right font-mono font-bold text-slate-800">
                       {Number(e.net_kg).toLocaleString()}
