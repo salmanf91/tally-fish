@@ -202,7 +202,7 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
       return Object.values(groups);
     }
 
-    return [{ boxes: '', parts: [{ fish: 'CHAMBAN', pct: '', c: '' }] }];
+    return [{ boxes: '', parts: [{ fish: 'CHAMBAN', pct: '100', c: '' }] }];
   };
 
   // Lines: [{ boxes: '64', parts: [{ fish: 'CHAMBAN', pct: '100', c: '20' }] }]
@@ -212,8 +212,26 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
   const [otherFishInput, setOtherFishInput] = useState('');
   const [showOtherInput, setShowOtherInput] = useState(false);
 
+  // Compute incrementally auto-generated slip number
+  const nextDailySlNo = useMemo(() => {
+    if (editEntry?.daily_sl_no) return editEntry.daily_sl_no;
+    const todayStr = new Date().toISOString().split('T')[0];
+    const todayEntries = (entriesList || []).filter((e) => {
+      const eDate = e.entry_date ? new Date(e.entry_date).toISOString().split('T')[0] : '';
+      return eDate === todayStr;
+    });
+    if (todayEntries.length === 0) return 1;
+    const maxSl = Math.max(...todayEntries.map((e) => e.daily_sl_no || 0), 0);
+    return maxSl + 1;
+  }, [editEntry, entriesList]);
+
+  const autoSlipNo = useMemo(() => {
+    if (editEntry?.slip_no) return editEntry.slip_no;
+    if (editEntry?.daily_sl_no) return `SL-${String(editEntry.daily_sl_no).padStart(3, '0')}`;
+    return `SL-${String(nextDailySlNo).padStart(3, '0')}`;
+  }, [editEntry, nextDailySlNo]);
+
   // Step 2 State: Vehicle & Weights
-  const [slipNo, setSlipNo] = useState(() => editEntry?.slip_no || '');
   const [vehicleNo, setVehicleNo] = useState(() => editEntry?.vehicle_no || '');
   const [grossLoaded, setGrossLoaded] = useState(() => String(editEntry?.gross_loaded_kg || ''));
   const [emptyTare, setEmptyTare] = useState(() => String(editEntry?.empty_tare_kg || ''));
@@ -278,10 +296,10 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
         })
       );
     } else {
-      // Add as standalone box line immutably - keep pct empty initially (Point 2)
+      // Add as standalone box line immutably - default single species pct to 100
       setLines((prev) => [
         ...prev,
-        { boxes: '', parts: [{ fish: fishName, pct: '', c: '' }] },
+        { boxes: '', parts: [{ fish: fishName, pct: '100', c: '' }] },
       ]);
     }
   };
@@ -408,6 +426,7 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
       entry_date: entryDate,
       party_name: partySearch.trim(),
       vehicle_no: vehicleNo.trim().toUpperCase(),
+      slip_no: autoSlipNo,
       gross_loaded_kg: loadedVal,
       empty_tare_kg: emptyVal,
       ice_water_kg: iceVal,
@@ -507,11 +526,11 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
             }
           />
 
-          {/* 5 Popular Client / Vendor Chips strictly from DB */}
+          {/* Popular Client / Vendor Chips strictly from DB */}
           {popularParties.length > 0 && (
             <div className="pt-0.5">
               <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                ★ 5 Popular Vendors
+                Popular Vendors
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {popularParties.map((pName) => {
@@ -521,10 +540,10 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
                       key={pName}
                       type="button"
                       onClick={() => setPartySearch(pName)}
-                      className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition-all ${
+                      className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition-all active:scale-95 shadow-2xs ${
                         isSelected
-                          ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
-                          : 'bg-white text-slate-700 border-slate-300 hover:border-slate-400'
+                          ? 'bg-amber-500 text-white border-amber-500 shadow-sm ring-1 ring-amber-400'
+                          : 'bg-white text-slate-700 border-slate-300 hover:border-slate-400 hover:bg-slate-50'
                       }`}
                     >
                       {pName}
@@ -560,10 +579,9 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
           <div className="space-y-2">
             {lines.map((line, li) => {
               const totalPct = line.parts.reduce((acc, p) => acc + (parseFloat(p.pct) || 0), 0);
-              const isSingleAuto = line.parts.length === 1 && !line.parts[0].pct;
-              const effectivePct = isSingleAuto ? 100 : totalPct;
-              const isOver = effectivePct > 100;
-              const isComplete = effectivePct === 100;
+              const hasAnyPct = line.parts.some((p) => p.pct !== '' && !isNaN(parseFloat(p.pct)));
+              const isOver = totalPct > 100;
+              const isComplete = totalPct === 100;
 
               return (
                 <div key={li} className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
@@ -632,13 +650,17 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
                       <span className="text-emerald-700 font-semibold">
                         ✓ 100% complete
                       </span>
-                    ) : (
+                    ) : hasAnyPct ? (
                       <span className="text-amber-700 font-bold">
                         Mix must total 100% (currently {totalPct}%)
                       </span>
+                    ) : (
+                      <span className="text-slate-400">
+                        Enter mix %
+                      </span>
                     )}
 
-                    {effectivePct >= 100 ? (
+                    {isComplete ? (
                       mixTargetIndex === li ? (
                         <button
                           type="button"
@@ -699,11 +721,11 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
               onCustomAction={() => setShowOtherInput(true)}
             />
 
-            {/* 5 Popular Fish Species Chips strictly from DB */}
+            {/* Popular Fish Species Chips strictly from DB */}
             {popularFish.length > 0 && (
               <div className="pt-0.5">
                 <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                  ★ 5 Popular Species
+                  Popular Species
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {popularFish.map((chip) => (
@@ -711,15 +733,15 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
                       key={chip}
                       type="button"
                       onClick={() => handleAddFish(chip)}
-                      className="touch-key text-xs font-bold px-3 py-1.5 rounded-xl bg-white border border-slate-300 text-slate-800 hover:bg-slate-50 active:bg-slate-100 shadow-sm"
+                      className="touch-key text-xs font-bold px-3 py-1.5 rounded-xl bg-white border border-slate-300 text-slate-800 hover:bg-slate-50 hover:border-slate-400 active:bg-slate-100 active:scale-95 shadow-2xs transition-all"
                     >
-                      {chip}
+                      + {chip}
                     </button>
                   ))}
                   <button
                     type="button"
                     onClick={() => setShowOtherInput(!showOtherInput)}
-                    className="touch-key text-xs font-semibold px-3 py-1.5 rounded-xl border border-dashed border-slate-300 text-slate-600 hover:border-amber-400 hover:text-amber-800 transition-all"
+                    className="touch-key text-xs font-semibold px-3 py-1.5 rounded-xl border border-dashed border-slate-300 text-slate-600 hover:border-amber-400 hover:text-amber-800 active:scale-95 transition-all"
                   >
                     Other…
                   </button>
@@ -846,19 +868,23 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
       {/* Slip No & Vehicle No Input */}
       <div className="light-card p-4 rounded-2xl space-y-3">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {/* Optional Slip No */}
+          {/* Incrementally Auto-Generated Slip No */}
           <div>
             <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
-              Slip No (Optional)
+              Slip No (Auto-generated)
             </label>
-            <input
-              type="text"
-              maxLength={30}
-              placeholder="e.g. SL-001"
-              value={slipNo}
-              onChange={(e) => setSlipNo(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
-            />
+            <div className="relative">
+              <input
+                type="text"
+                readOnly
+                disabled
+                value={autoSlipNo}
+                className="w-full bg-slate-100 border border-slate-300 rounded-xl px-3 py-2 text-sm font-mono font-bold text-slate-700 cursor-not-allowed select-none"
+              />
+              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[9px] font-bold uppercase tracking-wider text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                Auto
+              </span>
+            </div>
           </div>
 
           {/* Vehicle No Select Search Dropdown */}
@@ -881,11 +907,11 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
               }
             />
 
-            {/* 5 Popular Vehicles strictly from DB */}
+            {/* Popular Vehicles strictly from DB */}
             {popularVehicles.length > 0 && (
               <div className="pt-2">
                 <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                  ★ 5 Popular Vehicles
+                  Popular Vehicles
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {popularVehicles.map((v) => (
@@ -893,10 +919,10 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
                       key={v}
                       type="button"
                       onClick={() => setVehicleNo(v)}
-                      className={`text-[11px] font-mono font-bold px-2.5 py-1 rounded-lg border whitespace-nowrap ${
+                      className={`text-[11px] font-mono font-bold px-2.5 py-1.5 rounded-xl border whitespace-nowrap transition-all active:scale-95 shadow-2xs ${
                         vehicleNo === v
-                          ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
-                          : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                          ? 'bg-amber-500 text-white border-amber-500 shadow-sm ring-1 ring-amber-400'
+                          : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
                       }`}
                     >
                       {v}
@@ -945,9 +971,9 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
           />
         </div>
 
-        {/* Ice / Water */}
-        <div className="light-card p-3.5 rounded-2xl border border-slate-200 bg-slate-50 focus-within:ring-2 focus-within:ring-slate-400">
-          <label className="text-[10px] font-bold uppercase tracking-wider text-slate-600 block mb-1">
+        {/* Ice / Water (Identical style to Loaded box) */}
+        <div className="light-card p-3.5 rounded-2xl border border-amber-200 bg-amber-50/40 focus-within:ring-2 focus-within:ring-amber-400">
+          <label className="text-[10px] font-bold uppercase tracking-wider text-amber-900 block mb-1">
             Ice / Water Deduction (kg)
           </label>
           <input
@@ -958,7 +984,7 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
             placeholder="0"
             value={iceWater}
             onChange={(e) => setIceWater(e.target.value)}
-            className="w-full text-xl font-mono font-black text-slate-900 bg-white border border-slate-300 rounded-xl px-3 py-2 focus:outline-none focus:border-slate-400"
+            className="w-full text-xl font-mono font-black text-slate-900 bg-white border border-slate-300 rounded-xl px-3 py-2 focus:outline-none focus:border-amber-500"
           />
         </div>
       </div>

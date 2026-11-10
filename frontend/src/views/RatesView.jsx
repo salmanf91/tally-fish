@@ -48,30 +48,36 @@ export default function RatesView({ initialEntryId = null, onDone }) {
     return map;
   }, [entries]);
 
-  // Pending queue of entry IDs
-  const [queue, setQueue] = useState([]);
+  // List of all entries pending rate setting
+  const pendingEntries = useMemo(() => {
+    if (!Array.isArray(entries)) return [];
+    return entries.filter((e) => e.status === 'RATE_PENDING');
+  }, [entries]);
+
+  const [selectedEntryId, setSelectedEntryId] = useState(initialEntryId || null);
   const [activePartKey, setActivePartKey] = useState('0'); // index of active fish part
   const [ratesMap, setRatesMap] = useState({});
   const [toastMessage, setToastMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
 
-  // Initialize queue
+  // Sync selectedEntryId with initialEntryId or first pending entry
   useEffect(() => {
-    if (entries.length > 0) {
-      if (initialEntryId) {
-        setQueue([initialEntryId]);
-      } else {
-        const pending = entries.filter((e) => e.status === 'RATE_PENDING').map((e) => e.id);
-        setQueue(pending);
-      }
+    if (initialEntryId) {
+      setSelectedEntryId(initialEntryId);
+    } else if (pendingEntries.length > 0 && (!selectedEntryId || !entries.some((e) => e.id === selectedEntryId))) {
+      setSelectedEntryId(pendingEntries[0].id);
     }
-  }, [entries, initialEntryId]);
+  }, [initialEntryId, pendingEntries, selectedEntryId, entries]);
 
-  // Current entry
+  // Current entry being rated
   const currentEntry = useMemo(() => {
-    if (queue.length === 0) return null;
-    return entries.find((e) => e.id === queue[0]) || null;
-  }, [queue, entries]);
+    if (selectedEntryId) {
+      const found = entries.find((e) => e.id === selectedEntryId);
+      if (found) return found;
+    }
+    if (pendingEntries.length > 0) return pendingEntries[0];
+    return null;
+  }, [selectedEntryId, entries, pendingEntries]);
 
   // Group fish lines into box lots for current entry
   const groupedLots = useMemo(() => {
@@ -160,10 +166,13 @@ export default function RatesView({ initialEntryId = null, onDone }) {
       const res = await api.post(`/entries/${entryId}/rates`, { rates });
       return res.data;
     },
-    onSuccess: () => {
+    onSuccess: (data, { entryId }) => {
       queryClient.invalidateQueries({ queryKey: ['entries'] });
-      // Go back to list or read view immediately once rate is entered
-      if (onDone) {
+      const remaining = pendingEntries.filter((e) => e.id !== entryId);
+      if (remaining.length > 0 && !initialEntryId) {
+        setSelectedEntryId(remaining[0].id);
+        setToastMessage('Rates saved! Moved to next pending slip.');
+      } else if (onDone) {
         onDone();
       }
     },
@@ -201,7 +210,11 @@ export default function RatesView({ initialEntryId = null, onDone }) {
             });
           });
 
-          if (onDone) {
+          const remaining = pendingEntries.filter((e) => e.id !== entryId);
+          if (remaining.length > 0 && !initialEntryId) {
+            setSelectedEntryId(remaining[0].id);
+            setToastMessage('Rates saved offline! Moved to next pending slip.');
+          } else if (onDone) {
             onDone();
           }
           return;
@@ -215,11 +228,10 @@ export default function RatesView({ initialEntryId = null, onDone }) {
   });
 
   const handleSkip = () => {
-    setQueue((prev) => {
-      if (prev.length <= 1) return prev;
-      const [first, ...rest] = prev;
-      return [...rest, first];
-    });
+    if (pendingEntries.length <= 1) return;
+    const currentIdx = pendingEntries.findIndex((e) => e.id === currentEntry?.id);
+    const nextIdx = (currentIdx + 1) % pendingEntries.length;
+    setSelectedEntryId(pendingEntries[nextIdx].id);
   };
 
   const handleSaveAndNext = () => {
@@ -335,6 +347,56 @@ export default function RatesView({ initialEntryId = null, onDone }) {
         <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium flex items-center gap-2">
           <AlertCircle className="w-4 h-4 text-rose-600" />
           <span>{errorMessage}</span>
+        </div>
+      )}
+
+      {/* Pending Intake Slips Queue Selector */}
+      {pendingEntries.length > 0 && (
+        <div className="light-card p-3.5 rounded-2xl space-y-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <BadgeDollarSign className="w-4 h-4 text-amber-600" />
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                Pending Slips Queue
+              </h3>
+            </div>
+            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
+              {pendingEntries.length} slip{pendingEntries.length > 1 ? 's' : ''} awaiting rates
+            </span>
+          </div>
+
+          <div className="flex gap-2 overflow-x-auto pb-1 pt-0.5">
+            {pendingEntries.map((pe) => {
+              const isSelected = pe.id === currentEntry?.id;
+              return (
+                <button
+                  key={pe.id}
+                  type="button"
+                  onClick={() => setSelectedEntryId(pe.id)}
+                  className={`text-left p-2.5 rounded-xl border transition-all shrink-0 min-w-[170px] max-w-[210px] active:scale-[0.98] ${
+                    isSelected
+                      ? 'bg-amber-50/80 border-amber-500 ring-2 ring-amber-400 shadow-sm'
+                      : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[11px] font-mono font-black text-slate-800">
+                      SL #{pe.daily_sl_no || (pe.slip_no ? pe.slip_no.replace('SL-', '') : '—')}
+                    </span>
+                    <span className="text-[9px] font-mono font-bold text-slate-600 bg-slate-100 px-1 rounded">
+                      {Number(pe.net_kg).toLocaleString()} kg
+                    </span>
+                  </div>
+                  <div className="font-bold text-xs text-slate-900 truncate">
+                    {pe.party_name}
+                  </div>
+                  <div className="text-[10px] font-mono text-slate-400 truncate mt-0.5">
+                    {pe.vehicle_no || 'No vehicle'}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
 
