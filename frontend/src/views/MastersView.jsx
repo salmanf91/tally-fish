@@ -446,7 +446,7 @@ export default function MastersView() {
   }, [fishTypes, statusFilter, searchTerm]);
 
   return (
-    <div className="space-y-4 max-w-5xl mx-auto pb-12">
+    <div className="space-y-4 w-full pb-12">
       {/* Top Header Card */}
       <div className="light-card p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm border border-slate-200">
         <div>
@@ -594,239 +594,311 @@ export default function MastersView() {
         </div>
       </div>
 
-      {/* Tab Contents: Grid of Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-        {/* PARTIES CARDS */}
+      {/* Tab Contents: Proper DataTable List Views */}
+      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs">
+        {/* PARTIES DATATABLE */}
         {activeTab === 'parties' && (
           <>
-            {filteredParties.map((p) => (
-              <div
-                key={p.id}
-                className="light-card p-4 rounded-2xl flex flex-col justify-between border border-slate-200 bg-white hover:border-slate-300 transition-all shadow-sm"
-              >
-                <div>
-                  <div className="flex items-start justify-between gap-2">
-                    <h4 className="font-bold text-sm text-slate-900 leading-tight">{p.name}</h4>
-                    <span
-                      className={`text-[10px] px-2 py-0.5 rounded-full font-bold border shrink-0 ${
-                        p.is_active
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                          : 'bg-slate-100 text-slate-500 border-slate-200'
-                      }`}
-                    >
-                      {p.is_active ? 'Active' : 'Inactive'}
-                    </span>
-                  </div>
-
-                  <div className="mt-2 space-y-1 text-xs text-slate-500">
-                    <div className="flex items-center gap-1.5 font-mono">
-                      <span className="text-slate-400">Code:</span>
-                      <span className="font-semibold text-slate-700">{p.code || '—'}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 font-mono">
-                      <span className="text-slate-400">Phone:</span>
-                      <span className="text-slate-700">{p.phone || '—'}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {canCurate && (
-                  <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
-                    <button
-                      onClick={() => handleToggleActive(p)}
-                      title={p.is_active ? 'Deactivate vendor' : 'Activate vendor'}
-                      className={`text-[11px] font-semibold px-2 py-1 rounded-lg flex items-center gap-1 transition-all ${
-                        p.is_active
-                          ? 'text-slate-500 hover:text-amber-700 hover:bg-amber-50'
-                          : 'text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50'
-                      }`}
-                    >
-                      <Power className="w-3 h-3" />
-                      {p.is_active ? 'Deactivate' : 'Activate'}
-                    </button>
-
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => handleOpenEdit(p)}
-                        title="Edit Vendor"
-                        className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-all"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => setDeleteConfirmItem(p)}
-                        title="Delete Vendor"
-                        className="p-1.5 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 transition-all"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                )}
+            {filteredParties.length === 0 ? (
+              <div className="p-12 text-center bg-white space-y-2">
+                <Users className="w-8 h-8 text-slate-300 mx-auto mb-1" />
+                <p className="text-sm font-bold text-slate-700">No vendors found</p>
+                <p className="text-xs text-slate-400">Click &ldquo;+ Add Vendor&rdquo; or &ldquo;Import CSV&rdquo; to populate master records.</p>
               </div>
-            ))}
-            {filteredParties.length === 0 && (
-              <div className="col-span-full p-8 text-center bg-white rounded-2xl border border-dashed border-slate-300">
-                <Users className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                <p className="text-sm font-semibold text-slate-700">No vendors found</p>
-                <p className="text-xs text-slate-400 mt-0.5">Click "+ Add Vendor" or "Import CSV" to populate master records.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                      <th className="py-3 px-4 w-12 text-center">#</th>
+                      <th className="py-3 px-4">Vendor / Party Name</th>
+                      <th className="py-3 px-4 w-28">Code</th>
+                      <th className="py-3 px-4">Phone / Contact</th>
+                      <th className="py-3 px-4 w-28">Status</th>
+                      <th className="py-3 px-4 w-48 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredParties.map((p, idx) => (
+                      <tr key={p.id} className="hover:bg-amber-50/40 transition-colors">
+                        <td className="py-3 px-4 text-center font-mono text-slate-400 font-semibold">
+                          {idx + 1}
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className="font-bold text-slate-900 text-xs">{p.name}</span>
+                        </td>
+                        <td className="py-3 px-4 font-mono font-semibold text-slate-700">
+                          {p.code ? (
+                            <span className="px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-[11px]">
+                              {p.code}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 font-mono text-slate-600">
+                          {p.phone || <span className="text-slate-400">—</span>}
+                        </td>
+                        <td className="py-3 px-4">
+                          <span
+                            className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2 py-0.5 rounded-full border ${
+                              p.is_active
+                                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                : 'bg-slate-100 text-slate-500 border-slate-200'
+                            }`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full ${p.is_active ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+                            {p.is_active ? 'Active' : 'Inactive'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {canCurate && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleActive(p)}
+                                  title={p.is_active ? 'Deactivate vendor' : 'Activate vendor'}
+                                  className={`p-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1 transition-colors ${
+                                    p.is_active
+                                      ? 'border-slate-200 text-slate-500 hover:text-amber-800 hover:bg-amber-50'
+                                      : 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'
+                                  }`}
+                                >
+                                  <Power className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEdit(p)}
+                                  title="Edit Vendor"
+                                  className="p-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setDeleteConfirmItem(p)}
+                                  title="Delete Vendor"
+                                  className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="p-3 bg-slate-50 border-t border-slate-200 text-xs text-slate-500 flex items-center justify-between">
+                  <span>Total Vendors: <strong>{filteredParties.length}</strong></span>
+                  <span className="text-[11px] text-slate-400">Verified procurement parties &amp; boat vendors</span>
+                </div>
               </div>
             )}
           </>
         )}
 
-        {/* VEHICLES CARDS */}
+        {/* VEHICLES DATATABLE */}
         {activeTab === 'vehicles' && (
           <>
-            {filteredVehicles.map((v) => (
-              <div
-                key={v.id}
-                className="light-card p-4 rounded-2xl flex flex-col justify-between border border-slate-200 bg-white hover:border-slate-300 transition-all shadow-sm"
-              >
-                <div>
-                  <div className="flex items-start justify-between gap-2">
-                    <h4 className="font-mono font-bold text-sm text-blue-700 tracking-wide">{v.vehicle_no}</h4>
-                    <span
-                      className={`text-[10px] px-2 py-0.5 rounded-full font-bold border shrink-0 ${
-                        v.is_active
-                          ? 'bg-blue-50 text-blue-700 border-blue-200'
-                          : 'bg-slate-100 text-slate-500 border-slate-200'
-                      }`}
-                    >
-                      {v.is_active ? 'Active' : 'Inactive'}
-                    </span>
-                  </div>
-
-                  <div className="mt-2 space-y-1 text-xs text-slate-500">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-slate-400">Associated Vendor:</span>
-                      <span className="font-semibold text-slate-800">{v.party_name || 'Generic / Freelance'}</span>
-                    </div>
-                    {v.notes && (
-                      <p className="text-slate-400 text-[11px] line-clamp-1 italic mt-1">{v.notes}</p>
-                    )}
-                  </div>
-                </div>
-
-                {canCurate && (
-                  <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
-                    <button
-                      onClick={() => handleToggleActive(v)}
-                      title={v.is_active ? 'Deactivate vehicle' : 'Activate vehicle'}
-                      className={`text-[11px] font-semibold px-2 py-1 rounded-lg flex items-center gap-1 transition-all ${
-                        v.is_active
-                          ? 'text-slate-500 hover:text-blue-700 hover:bg-blue-50'
-                          : 'text-blue-600 hover:text-blue-700 hover:bg-blue-50'
-                      }`}
-                    >
-                      <Power className="w-3 h-3" />
-                      {v.is_active ? 'Deactivate' : 'Activate'}
-                    </button>
-
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => handleOpenEdit(v)}
-                        title="Edit Vehicle"
-                        className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-all"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => setDeleteConfirmItem(v)}
-                        title="Delete Vehicle"
-                        className="p-1.5 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 transition-all"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                )}
+            {filteredVehicles.length === 0 ? (
+              <div className="p-12 text-center bg-white space-y-2">
+                <Truck className="w-8 h-8 text-slate-300 mx-auto mb-1" />
+                <p className="text-sm font-bold text-slate-700">No vehicles found</p>
+                <p className="text-xs text-slate-400">Click &ldquo;+ Add Vehicle&rdquo; or &ldquo;Import CSV&rdquo; to register transport vehicles.</p>
               </div>
-            ))}
-            {filteredVehicles.length === 0 && (
-              <div className="col-span-full p-8 text-center bg-white rounded-2xl border border-dashed border-slate-300">
-                <Truck className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                <p className="text-sm font-semibold text-slate-700">No vehicles found</p>
-                <p className="text-xs text-slate-400 mt-0.5">Click "+ Add Vehicle" or "Import CSV" to register transport vehicles.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                      <th className="py-3 px-4 w-12 text-center">#</th>
+                      <th className="py-3 px-4">Vehicle Registration No</th>
+                      <th className="py-3 px-4">Associated Vendor / Owner</th>
+                      <th className="py-3 px-4">Tare / Notes</th>
+                      <th className="py-3 px-4 w-28">Status</th>
+                      <th className="py-3 px-4 w-48 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredVehicles.map((v, idx) => (
+                      <tr key={v.id} className="hover:bg-blue-50/40 transition-colors">
+                        <td className="py-3 px-4 text-center font-mono text-slate-400 font-semibold">
+                          {idx + 1}
+                        </td>
+                        <td className="py-3 px-4 font-mono font-bold text-blue-900 text-xs">
+                          <span className="px-2 py-1 rounded-md bg-blue-50 border border-blue-200 tracking-wider">
+                            {v.vehicle_no}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 font-medium text-slate-800">
+                          {v.party_name || <span className="text-slate-400 italic">Generic / Freelance</span>}
+                        </td>
+                        <td className="py-3 px-4 text-slate-600">
+                          {v.notes ? <span className="text-[11px] text-slate-500 font-mono">{v.notes}</span> : <span className="text-slate-400">—</span>}
+                        </td>
+                        <td className="py-3 px-4">
+                          <span
+                            className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2 py-0.5 rounded-full border ${
+                              v.is_active
+                                ? 'bg-blue-50 text-blue-800 border-blue-200'
+                                : 'bg-slate-100 text-slate-500 border-slate-200'
+                            }`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full ${v.is_active ? 'bg-blue-500' : 'bg-slate-400'}`} />
+                            {v.is_active ? 'Active' : 'Inactive'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {canCurate && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleActive(v)}
+                                  title={v.is_active ? 'Deactivate vehicle' : 'Activate vehicle'}
+                                  className={`p-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1 transition-colors ${
+                                    v.is_active
+                                      ? 'border-slate-200 text-slate-500 hover:text-blue-800 hover:bg-blue-50'
+                                      : 'border-blue-200 text-blue-700 hover:bg-blue-50'
+                                  }`}
+                                >
+                                  <Power className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEdit(v)}
+                                  title="Edit Vehicle"
+                                  className="p-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setDeleteConfirmItem(v)}
+                                  title="Delete Vehicle"
+                                  className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="p-3 bg-slate-50 border-t border-slate-200 text-xs text-slate-500 flex items-center justify-between">
+                  <span>Total Registered Vehicles: <strong>{filteredVehicles.length}</strong></span>
+                  <span className="text-[11px] text-slate-400">Transport and delivery trucks</span>
+                </div>
               </div>
             )}
           </>
         )}
 
-        {/* FISH SPECIES CARDS */}
+        {/* FISH SPECIES DATATABLE */}
         {activeTab === 'fish' && (
           <>
-            {filteredFishTypes.map((f) => (
-              <div
-                key={f.id}
-                className="light-card p-4 rounded-2xl flex flex-col justify-between border border-slate-200 bg-white hover:border-slate-300 transition-all shadow-sm"
-              >
-                <div>
-                  <div className="flex items-start justify-between gap-2">
-                    <h4 className="font-bold text-sm text-emerald-800 tracking-wide">{f.name}</h4>
-                    <span
-                      className={`text-[10px] px-2 py-0.5 rounded-full font-bold border shrink-0 ${
-                        f.is_active
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                          : 'bg-slate-100 text-slate-500 border-slate-200'
-                      }`}
-                    >
-                      {f.is_active ? 'Active' : 'Inactive'}
-                    </span>
-                  </div>
-
-                  <div className="mt-2 space-y-1 text-xs text-slate-500">
-                    <div className="flex items-center gap-1.5 font-mono">
-                      <span className="text-slate-400">Code:</span>
-                      <span className="font-semibold text-slate-700">{f.code || '—'}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-slate-400">Default Rate:</span>
-                      <span className="font-bold text-emerald-700 font-mono">₹{parseFloat(f.default_rate || 0).toFixed(2)}/kg</span>
-                    </div>
-                  </div>
-                </div>
-
-                {canCurate && (
-                  <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
-                    <button
-                      onClick={() => handleToggleActive(f)}
-                      title={f.is_active ? 'Deactivate species' : 'Activate species'}
-                      className={`text-[11px] font-semibold px-2 py-1 rounded-lg flex items-center gap-1 transition-all ${
-                        f.is_active
-                          ? 'text-slate-500 hover:text-emerald-700 hover:bg-emerald-50'
-                          : 'text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50'
-                      }`}
-                    >
-                      <Power className="w-3 h-3" />
-                      {f.is_active ? 'Deactivate' : 'Activate'}
-                    </button>
-
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => handleOpenEdit(f)}
-                        title="Edit Species"
-                        className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-all"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => setDeleteConfirmItem(f)}
-                        title="Delete Species"
-                        className="p-1.5 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 transition-all"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                )}
+            {filteredFishTypes.length === 0 ? (
+              <div className="p-12 text-center bg-white space-y-2">
+                <Fish className="w-8 h-8 text-slate-300 mx-auto mb-1" />
+                <p className="text-sm font-bold text-slate-700">No fish species found</p>
+                <p className="text-xs text-slate-400">Click &ldquo;+ Add Species&rdquo; or &ldquo;Import CSV&rdquo; to populate the fish catalog.</p>
               </div>
-            ))}
-            {filteredFishTypes.length === 0 && (
-              <div className="col-span-full p-8 text-center bg-white rounded-2xl border border-dashed border-slate-300">
-                <Fish className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                <p className="text-sm font-semibold text-slate-700">No fish species found</p>
-                <p className="text-xs text-slate-400 mt-0.5">Click "+ Add Species" or "Import CSV" to populate the fish catalog.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                      <th className="py-3 px-4 w-12 text-center">#</th>
+                      <th className="py-3 px-4">Species Name</th>
+                      <th className="py-3 px-4 w-28">Species Code</th>
+                      <th className="py-3 px-4">Default Benchmark Rate</th>
+                      <th className="py-3 px-4 w-28">Status</th>
+                      <th className="py-3 px-4 w-48 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredFishTypes.map((f, idx) => (
+                      <tr key={f.id} className="hover:bg-emerald-50/40 transition-colors">
+                        <td className="py-3 px-4 text-center font-mono text-slate-400 font-semibold">
+                          {idx + 1}
+                        </td>
+                        <td className="py-3 px-4 font-bold text-emerald-950 text-xs">
+                          {f.name}
+                        </td>
+                        <td className="py-3 px-4 font-mono font-semibold text-slate-700">
+                          {f.code ? (
+                            <span className="px-2 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px]">
+                              {f.code}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 font-mono font-bold text-emerald-700">
+                          ₹{parseFloat(f.default_rate || 0).toFixed(2)} / kg
+                        </td>
+                        <td className="py-3 px-4">
+                          <span
+                            className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2 py-0.5 rounded-full border ${
+                              f.is_active
+                                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                : 'bg-slate-100 text-slate-500 border-slate-200'
+                            }`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full ${f.is_active ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+                            {f.is_active ? 'Active' : 'Inactive'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {canCurate && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleActive(f)}
+                                  title={f.is_active ? 'Deactivate species' : 'Activate species'}
+                                  className={`p-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1 transition-colors ${
+                                    f.is_active
+                                      ? 'border-slate-200 text-slate-500 hover:text-emerald-800 hover:bg-emerald-50'
+                                      : 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'
+                                  }`}
+                                >
+                                  <Power className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEdit(f)}
+                                  title="Edit Species"
+                                  className="p-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setDeleteConfirmItem(f)}
+                                  title="Delete Species"
+                                  className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="p-3 bg-slate-50 border-t border-slate-200 text-xs text-slate-500 flex items-center justify-between">
+                  <span>Total Fish Species: <strong>{filteredFishTypes.length}</strong></span>
+                  <span className="text-[11px] text-slate-400">Standard factory species catalog &amp; pricing benchmarks</span>
+                </div>
               </div>
             )}
           </>

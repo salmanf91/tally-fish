@@ -103,7 +103,7 @@ export default function BillingView({ onEditRates, onNewEntry, onEditEntry }) {
   };
 
   return (
-    <div className="space-y-4 max-w-xl mx-auto">
+    <div className="space-y-4 w-full">
       {/* Top Header */}
       <div className="light-card p-4 rounded-2xl flex items-center justify-between">
         <div>
@@ -194,7 +194,7 @@ export default function BillingView({ onEditRates, onNewEntry, onEditEntry }) {
           )}
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="grid grid-cols-1 desktop:grid-cols-2 gap-3">
           {approvedEntries.map((entry) => {
             const rateInfo = getRateSummary(entry);
 

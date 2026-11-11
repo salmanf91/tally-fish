@@ -273,7 +273,7 @@ export default function RatesView({ initialEntryId = null, onDone }) {
   // If no entries waiting for rate
   if (!isLoading && !currentEntry) {
     return (
-      <div className="space-y-4 max-w-xl mx-auto">
+      <div className="space-y-4 w-full max-w-4xl mx-auto">
         <div className="light-card p-4 rounded-2xl flex items-center justify-between">
           <h2 className="text-base font-black text-slate-900 flex items-center gap-2">
             <BadgeDollarSign className="w-5 h-5 text-amber-600" />
@@ -314,7 +314,7 @@ export default function RatesView({ initialEntryId = null, onDone }) {
   }
 
   return (
-    <div className="space-y-3.5 max-w-xl mx-auto">
+    <div className="space-y-3.5 w-full max-w-4xl mx-auto">
       {/* Header */}
       <div className="light-card p-4 rounded-2xl flex items-center justify-between">
         <div>

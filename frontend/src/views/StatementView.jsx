@@ -297,10 +297,10 @@ export default function StatementView({ onNavigateToRates, onNewEntry, onEditEnt
   // WhatsApp / Share Message generation
   const whatsappMessage = useMemo(() => {
     const isSingleDay = fromDate === toDate;
-    const dateRangeLabel = isSingleDay ? fromDate : `${fromDate} to ${toDate}`;
+    const dateLabel = isSingleDay ? `Date: ${fromDate}` : `Period: ${fromDate} to ${toDate}`;
 
     if (!shareParty) {
-      let msg = `Indo Fish Meal & Oil Co. Pvt. Ltd.\nProcurement Statement · ${dateRangeLabel}\nBranch: ${activeBranch?.branch_name || 'Ullal'}\n\n`;
+      let msg = `Indo Fish Meal & Oil Co. Pvt. Ltd.\nProcurement Statement · ${dateLabel}\nBranch: ${activeBranch?.branch_name || 'Ullal'}\n\n`;
       let totalNet = 0;
       filteredEntries.forEach((e, idx) => {
         totalNet += parseFloat(e.net_kg) || 0;
@@ -329,7 +329,7 @@ export default function StatementView({ onNavigateToRates, onNewEntry, onEditEnt
       return e.party_name === shareParty && d >= fromDate && d <= toDate;
     });
 
-    let msg = `Indo Fish Meal & Oil Co. Pvt. Ltd.\nDaily rate statement · ${dateRangeLabel}\nParty: ${shareParty}\n\n`;
+    let msg = `Indo Fish Meal & Oil Co. Pvt. Ltd.\nDaily rate statement · ${dateLabel}\nParty: ${shareParty}\n\n`;
     let partyTotalNet = 0;
 
     partyEntries.forEach((e, idx) => {
@@ -703,7 +703,7 @@ export default function StatementView({ onNavigateToRates, onNewEntry, onEditEnt
               <p class="subtitle">Procurement Statement · <strong>${branchName} (${branchCode})</strong></p>
             </div>
             <div class="meta-box">
-              <div><strong>Period:</strong> ${fromDate === toDate ? fromDate : `${fromDate} to ${toDate}`}</div>
+              <div><strong>${fromDate === toDate ? 'Date:' : 'Period:'}</strong> ${fromDate === toDate ? fromDate : `${fromDate} to ${toDate}`}</div>
               <div><strong>Generated:</strong> ${new Date().toLocaleString()}</div>
               <div><strong>Status:</strong> ${statusFilter}</div>
             </div>
@@ -769,7 +769,7 @@ export default function StatementView({ onNavigateToRates, onNewEntry, onEditEnt
   };
 
   return (
-    <div className="space-y-4 max-w-4xl mx-auto">
+    <div className="space-y-4 w-full">
       {/* Header */}
       <div className="light-card p-4 rounded-2xl flex items-center justify-between">
         <div>
@@ -778,7 +778,8 @@ export default function StatementView({ onNavigateToRates, onNewEntry, onEditEnt
             Daily Procurement Statement
           </h2>
           <p className="text-xs text-slate-500">
-            {fromDate === toDate ? fromDate : `${fromDate} to ${toDate}`} · {activeBranch?.branch_name}
+            <span className="font-semibold text-slate-700">{fromDate === toDate ? 'Date: ' : 'Period: '}</span>
+            <span>{fromDate === toDate ? fromDate : `${fromDate} to ${toDate}`}</span> · {activeBranch?.branch_name}
           </p>
         </div>
 
@@ -1005,6 +1006,48 @@ export default function StatementView({ onNavigateToRates, onNewEntry, onEditEnt
         </div>
       </div>
 
+      {/* Top Action Bar: WhatsApp Share, Excel Export, PDF Export (Prominent at top so user never needs to scroll) */}
+      <div className="light-card p-4 rounded-2xl bg-gradient-to-r from-emerald-50/50 via-white to-amber-50/30 border border-slate-200 shadow-2xs space-y-2.5">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+          <button
+            type="button"
+            onClick={isBilling ? handleOpenShare : handleShare}
+            className="flex-1 py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+          >
+            <Send className="w-4 h-4" />
+            <span>Send to client on WhatsApp</span>
+          </button>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleExportExcel}
+              className="flex-1 sm:flex-initial py-2.5 px-3.5 rounded-xl border border-slate-200 bg-white font-bold text-xs text-slate-700 hover:bg-slate-50 shadow-2xs flex items-center justify-center gap-1.5 transition-all"
+            >
+              <Download className="w-3.5 h-3.5 text-slate-500" />
+              <span>Excel Export</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleExportPDF}
+              className="flex-1 sm:flex-initial py-2.5 px-3.5 rounded-xl border border-slate-200 bg-white font-bold text-xs text-slate-700 hover:bg-slate-50 shadow-2xs flex items-center justify-center gap-1.5 transition-all"
+            >
+              <Printer className="w-3.5 h-3.5 text-slate-500" />
+              <span>PDF Export</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="text-[11px] text-slate-500 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1 pt-1 border-t border-slate-100">
+          <span>
+            {selectedParty ? `Filtered for Client: ${selectedParty}` : 'Choose a client in the filter or pick in the next step.'}
+          </span>
+          <span className="text-[10px] uppercase font-bold text-slate-400">
+            {fromDate === toDate ? `Daily Report · ${fromDate}` : `Period Report · ${fromDate} to ${toDate}`}
+          </span>
+        </div>
+      </div>
+
       {/* Procurement Slips Table */}
       <div className="light-card rounded-2xl overflow-hidden">
         {filteredEntries.length === 0 ? (
@@ -1163,73 +1206,6 @@ export default function StatementView({ onNavigateToRates, onNewEntry, onEditEnt
           </table>
         )}
       </div>
-
-      {/* Footer Actions */}
-      {isBilling ? (
-        <div className="light-card p-4 rounded-2xl space-y-3">
-          <button
-            type="button"
-            onClick={handleOpenShare}
-            className="w-full py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md flex items-center justify-center gap-2 transition-all"
-          >
-            <Send className="w-4 h-4" /> Send to client on WhatsApp
-          </button>
-          <p className="text-[11px] text-slate-500 text-center">
-            {selectedParty ? `Client: ${selectedParty}` : 'Choose a client in the filter or pick in the next step.'}
-          </p>
-
-          <div className="pt-2 border-t border-slate-100">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block mb-1.5">
-              Daily Report · All Clients
-            </span>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={handleExportExcel}
-                className="py-2.5 rounded-xl border border-slate-200 bg-white font-bold text-xs text-slate-700 hover:bg-slate-50 shadow-sm flex items-center justify-center gap-1.5 transition-all"
-              >
-                <Download className="w-3.5 h-3.5 text-slate-500" />
-                Excel Export
-              </button>
-              <button
-                type="button"
-                onClick={handleExportPDF}
-                className="py-2.5 rounded-xl border border-slate-200 bg-white font-bold text-xs text-slate-700 hover:bg-slate-50 shadow-sm flex items-center justify-center gap-1.5 transition-all"
-              >
-                <Printer className="w-3.5 h-3.5 text-slate-500" />
-                PDF Export
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="grid grid-cols-3 gap-2">
-          <button
-            type="button"
-            onClick={handleShare}
-            className="py-2.5 rounded-xl border border-slate-200 bg-white font-bold text-xs text-slate-700 hover:bg-slate-50 shadow-sm flex items-center justify-center gap-1.5 transition-all"
-          >
-            <Share2 className="w-3.5 h-3.5 text-slate-500" />
-            Share
-          </button>
-          <button
-            type="button"
-            onClick={handleExportPDF}
-            className="py-2.5 rounded-xl border border-slate-200 bg-white font-bold text-xs text-slate-700 hover:bg-slate-50 shadow-sm flex items-center justify-center gap-1.5 transition-all"
-          >
-            <Printer className="w-3.5 h-3.5 text-slate-500" />
-            PDF
-          </button>
-          <button
-            type="button"
-            onClick={handleExportExcel}
-            className="py-2.5 rounded-xl border border-slate-200 bg-white font-bold text-xs text-slate-700 hover:bg-slate-50 shadow-sm flex items-center justify-center gap-1.5 transition-all"
-          >
-            <Download className="w-3.5 h-3.5 text-slate-500" />
-            Excel
-          </button>
-        </div>
-      )}
 
       {/* WhatsApp Share Modal Sheet */}
       {shareModalOpen && (

@@ -144,7 +144,7 @@ export default function TodayView({ onNewEntry, onEditEntry, onViewLockedEntry }
   };
 
   return (
-    <div className="space-y-4 max-w-xl mx-auto">
+    <div className="space-y-4 w-full">
       {/* Header */}
       <div className="light-card p-4 rounded-2xl flex items-center justify-between">
         <div>
@@ -302,7 +302,7 @@ export default function TodayView({ onNewEntry, onEditEntry, onViewLockedEntry }
           </button>
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="grid grid-cols-1 desktop:grid-cols-2 gap-3">
           {filteredList.map((entry) => {
             const isLocked = entry.status === 'LOCKED';
             const isHoldReview = entry.status === 'HOLD_REVIEW';
