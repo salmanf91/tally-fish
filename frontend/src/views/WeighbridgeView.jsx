@@ -471,7 +471,7 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
   // --------------------------------------------------------------------------
   if (step === 'fish') {
     return (
-      <div className="space-y-4 max-w-xl mx-auto">
+      <div className="space-y-4 w-full max-w-4xl mx-auto">
         {/* Step Header */}
         <div className="light-card p-4 rounded-2xl flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -837,7 +837,7 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
   // STEP 2: VEHICLE AND WEIGHTS
   // --------------------------------------------------------------------------
   return (
-    <div className="space-y-4 max-w-xl mx-auto">
+    <div className="space-y-4 w-full max-w-4xl mx-auto">
       {/* Header with Back to Step 1 */}
       <div className="light-card p-4 rounded-2xl flex items-center justify-between">
         <div className="flex items-center gap-3">
