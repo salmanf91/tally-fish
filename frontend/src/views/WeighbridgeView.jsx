@@ -141,7 +141,7 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
   });
 
   const parseEntryLines = (entry) => {
-    if (!entry) return [{ boxes: '', parts: [{ fish: 'CHAMBAN', pct: '', c: '' }] }];
+    if (!entry) return [{ boxes: '', parts: [{ fish: 'CHAMBAN', pct: '100', c: '' }] }];
 
     // 1. Try parsing remarks if present (handles grouped fish with counts seamlessly)
     if (entry.remarks && typeof entry.remarks === 'string') {
@@ -985,7 +985,7 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
             min="0"
             step="any"
             maxLength={10}
-            placeholder="0"
+            placeholder=""
             value={iceWater}
             onChange={(e) => setIceWater(e.target.value)}
             className="w-full text-xl font-mono font-black text-slate-900 bg-white border border-slate-300 rounded-xl px-3 py-2 focus:outline-none focus:border-amber-500"
