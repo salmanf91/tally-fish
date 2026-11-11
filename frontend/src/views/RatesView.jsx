@@ -271,7 +271,7 @@ export default function RatesView({ initialEntryId = null, onDone }) {
   }, [parts, ratesMap, isMixedLot]);
 
   // If no entries waiting for rate
-  if (!isLoading && (!currentEntry || queue.length === 0)) {
+  if (!isLoading && !currentEntry) {
     return (
       <div className="space-y-4 max-w-xl mx-auto">
         <div className="light-card p-4 rounded-2xl flex items-center justify-between">
@@ -538,7 +538,7 @@ export default function RatesView({ initialEntryId = null, onDone }) {
         <button
           type="button"
           onClick={handleSkip}
-          disabled={queue.length <= 1}
+          disabled={pendingEntries.length <= 1}
           className="touch-key py-3.5 rounded-xl bg-white border border-slate-200 text-slate-700 font-bold text-xs hover:bg-slate-50 shadow-sm flex items-center justify-center gap-1.5 disabled:opacity-40"
         >
           <SkipForward className="w-4 h-4 text-slate-400" /> Skip Slip
@@ -551,7 +551,7 @@ export default function RatesView({ initialEntryId = null, onDone }) {
           className="touch-key py-3.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shadow-md flex items-center justify-center gap-1.5 disabled:opacity-50"
         >
           <Lock className="w-4 h-4 stroke-[2.5]" />
-          {fixRatesMutation.isPending ? 'Saving...' : queue.length > 1 ? 'Save & Next →' : 'Save Rates'}
+          {fixRatesMutation.isPending ? 'Saving...' : pendingEntries.length > 1 ? 'Save & Next →' : 'Save Rates'}
         </button>
       </div>
     </div>
