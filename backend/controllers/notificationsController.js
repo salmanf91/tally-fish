@@ -1,4 +1,5 @@
-const { saveSubscription, getVapidPublicKey } = require('../notifications');
+const db = require('../db');
+const { saveSubscription, getVapidPublicKey, sendPushNotification } = require('../notifications');
 
 /**
  * GET /api/notifications/vapid-key
@@ -92,8 +93,81 @@ async function subscribe(req, res, next) {
   }
 }
 
+/**
+ * POST /api/notifications/test
+ * Sends a test push alert to the logged-in user's registered phone/device subscriptions
+ */
+async function sendTestNotification(req, res, next) {
+  try {
+    const userId = req.user ? req.user.id : null;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+
+    const subRes = await db.query(
+      'SELECT * FROM push_subscriptions WHERE user_id = $1 ORDER BY updated_at DESC LIMIT 5',
+      [userId]
+    );
+
+    if (subRes.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'No active push subscription found for this account. Tap "Enable Real-time Web Push Alerts" on your phone first.',
+      });
+    }
+
+    const delay = parseInt(req.body.delaySeconds, 10) || 0;
+
+    const payload = {
+      title: 'Tally Fish Notification Test',
+      body: '🔔 Owner alert test! Your phone lock screen and notification bar alerts are operational.',
+      icon: '/icon.svg',
+      badge: '/icon.svg',
+      tag: 'test-notification',
+      data: {
+        type: 'TEST_ALERT',
+        url: '/',
+        timestamp: new Date().toISOString(),
+      },
+    };
+
+    const dispatch = async () => {
+      for (const sub of subRes.rows) {
+        try {
+          await sendPushNotification(
+            {
+              endpoint: sub.endpoint,
+              keys: { p256dh: sub.p256dh_key, auth: sub.auth_key },
+            },
+            payload
+          );
+        } catch (sendErr) {
+          console.warn('[WebPush Test] Failed sending to endpoint:', sendErr.message);
+        }
+      }
+    };
+
+    if (delay > 0) {
+      setTimeout(dispatch, delay * 1000);
+      return res.status(200).json({
+        success: true,
+        message: `Test alert will be sent in ${delay} seconds. Lock your phone screen now!`,
+      });
+    } else {
+      await dispatch();
+      return res.status(200).json({
+        success: true,
+        message: 'Test notification dispatched to your phone!',
+      });
+    }
+  } catch (err) {
+    return next(err);
+  }
+}
+
 module.exports = {
   getVapidKey,
   subscribe,
+  sendTestNotification,
 };
 

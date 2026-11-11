@@ -16,6 +16,13 @@ async function startServer() {
       `[Database] Connected successfully to PostgreSQL "${dbTest.rows[0].db_name}" at ${dbTest.rows[0].current_time}`
     );
 
+    // Auto-heal schema: Ensure legacy unique constraint on (entry_id, fish_name) is dropped to support multi-lot entries
+    try {
+      await db.query('ALTER TABLE entry_rates DROP CONSTRAINT IF EXISTS uq_entry_rates_entry_fish');
+    } catch (patchErr) {
+      console.warn('[Database] Schema auto-heal notice:', patchErr.message);
+    }
+
     app.listen(PORT, () => {
       console.log(`[Server] Tally Fish Backend API running on port ${PORT} (${config.nodeEnv})`);
       console.log(`[Server] Health check available at http://localhost:${PORT}/api/health`);

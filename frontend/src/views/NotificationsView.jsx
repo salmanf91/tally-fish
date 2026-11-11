@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, CheckCircle2, ShieldCheck, Send, AlertTriangle } from 'lucide-react';
+import { Bell, CheckCircle2, ShieldCheck, Send, AlertTriangle, BellRing, Lock, Smartphone } from 'lucide-react';
 import { api } from '../services/api';
 import { useBranch } from '../context/BranchContext';
 
@@ -43,9 +43,29 @@ export default function NotificationsView() {
     }
   }, []);
 
+  const isSecure = typeof window !== 'undefined' && window.isSecureContext;
+  const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  const isStandalone = typeof window !== 'undefined' && (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true);
+
   const handleSubscribePush = async () => {
+    if (!isSecure) {
+      setErrorMessage(
+        'HTTPS Required: Mobile browsers disable Web Push when accessed over unencrypted HTTP (http://...). Please access the app using https:// to enable push alerts.'
+      );
+      return;
+    }
+
+    if (isIOS && !isStandalone) {
+      setErrorMessage(
+        'iPhone / iPad Notice: Apple requires adding the app to your Home Screen before Push notifications can be enabled. Tap Safari Share (square with arrow) -> "Add to Home Screen", open the app from your home screen, and tap Enable Alerts.'
+      );
+      return;
+    }
+
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-      setErrorMessage('W3C Web Push is not supported by this browser.');
+      setErrorMessage(
+        'Web Push is not supported by this browser. If opened inside an app (e.g., WhatsApp or Gmail), please tap the menu and choose "Open in Chrome" or "Open in Safari".'
+      );
       return;
     }
     if (!vapidKey) {
@@ -83,6 +103,42 @@ export default function NotificationsView() {
       setErrorMessage(err.message || 'Push permission denied or subscription error.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const [testingAlert, setTestingAlert] = useState(false);
+
+  const handleTestLocalNotification = async () => {
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      setErrorMessage('Browser desktop/phone notification API is not supported in this browser window.');
+      return;
+    }
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission === 'granted') {
+        new Notification('TallyFish Alert (Test)', {
+          body: 'Rate Pending: Coastal Catchers Ltd - 13 kg CHAMBAN waiting for owner rate confirmation.',
+          icon: '/favicon.ico',
+        });
+        setStatusMessage('Local browser notification displayed on your device!');
+      } else {
+        setErrorMessage('Notification permission was denied. Please allow notifications in browser site settings.');
+      }
+    } catch (e) {
+      setErrorMessage('Local notification error: ' + e.message);
+    }
+  };
+
+  const handleSendTestAlert = async (delaySeconds = 0) => {
+    setTestingAlert(true);
+    setErrorMessage('');
+    try {
+      const res = await api.post('/notifications/test', { delaySeconds });
+      setStatusMessage(res.message || 'Test alert sent to your device!');
+    } catch (err) {
+      setErrorMessage(err.message || 'Failed to send test alert');
+    } finally {
+      setTestingAlert(false);
     }
   };
 
@@ -150,6 +206,31 @@ export default function NotificationsView() {
           </div>
         </div>
 
+        {!isSecure && (
+          <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-xs space-y-1">
+            <div className="font-bold flex items-center gap-1.5">
+              <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0" />
+              <span>HTTPS Secure Connection Required for Mobile Web Push</span>
+            </div>
+            <p className="text-[11px] leading-relaxed text-amber-800">
+              You are currently accessing via unencrypted <code>http://</code>. Modern mobile browsers (Chrome, Edge, Safari) strictly disable Web Push and Service Workers unless accessed over <strong>https://</strong> (or localhost). Please access via HTTPS or an SSL tunnel to enable lock screen push alerts on mobile.
+            </p>
+          </div>
+        )}
+
+        {isIOS && !isStandalone && (
+          <div className="p-3.5 rounded-xl bg-blue-50 border border-blue-300 text-blue-900 text-xs space-y-1">
+            <div className="font-bold flex items-center gap-1.5">
+              <Smartphone className="w-4 h-4 text-blue-700 shrink-0" />
+              <span>iPhone / iPad Setup Required</span>
+            </div>
+            <p className="text-[11px] leading-relaxed text-blue-800">
+              Apple requires adding the app to your Home Screen before Push notifications can be enabled:
+              Tap Safari&apos;s <strong>Share</strong> button (box with upward arrow) &rarr; select <strong>&quot;Add to Home Screen&quot;</strong> &rarr; open TallyFish from your Home Screen &rarr; tap Enable Alerts.
+            </p>
+          </div>
+        )}
+
         <button
           onClick={handleSubscribePush}
           disabled={isLoading}
@@ -162,6 +243,55 @@ export default function NotificationsView() {
             ? 'Re-Sync Push Subscription'
             : 'Enable Real-time Web Push Alerts'}
         </button>
+
+        <div className="pt-1">
+          <button
+            type="button"
+            onClick={handleTestLocalNotification}
+            className="w-full py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold border border-slate-300 flex items-center justify-center gap-2 transition-colors"
+          >
+            <BellRing className="w-4 h-4 text-slate-600" />
+            <span>Test Immediate In-Browser Alert</span>
+          </button>
+        </div>
+
+        {/* Live Phone Testing Controls */}
+        {isSubscribed && (
+          <div className="pt-3 border-t border-slate-100 space-y-3">
+            <div className="flex items-center gap-2">
+              <Smartphone className="w-4 h-4 text-amber-600" />
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                Test Phone Notifications (Lock Screen &amp; Status Bar)
+              </h4>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => handleSendTestAlert(0)}
+                disabled={testingAlert}
+                className="py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition-all flex items-center justify-center gap-2 border border-slate-200"
+              >
+                <BellRing className="w-4 h-4 text-amber-600" />
+                <span>Instant Phone Alert Test</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleSendTestAlert(5)}
+                disabled={testingAlert}
+                className="py-2.5 px-3 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-bold transition-all flex items-center justify-center gap-2 border border-amber-300"
+              >
+                <Lock className="w-4 h-4 text-amber-700" />
+                <span>Test Lock Screen (in 5 sec)</span>
+              </button>
+            </div>
+
+            <p className="text-[11px] text-slate-500 leading-normal bg-slate-50 p-3 rounded-xl border border-slate-200/70">
+              📱 <strong>How to test on Lock Screen:</strong> Tap <em>"Test Lock Screen (in 5 sec)"</em> and immediately press your phone's power button to lock the screen. In 5 seconds, your phone will chime/vibrate and display the alert on your lock screen.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -17,5 +17,12 @@ router.get('/vapid-key', notificationsController.getVapidKey);
  */
 router.post('/subscribe', authenticateToken, notificationsController.subscribe);
 
+/**
+ * @route   POST /api/notifications/test
+ * @desc    Send immediate or delayed test push alert to caller's registered phone
+ * @access  Authenticated
+ */
+router.post('/test', authenticateToken, notificationsController.sendTestNotification);
+
 module.exports = router;
 
