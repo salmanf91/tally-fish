@@ -20,3 +20,4 @@ exports.down = (pgm) => {
     ALTER TABLE entry_rates ADD CONSTRAINT uq_entry_rates_entry_fish UNIQUE (entry_id, fish_name);
   `);
 };
+

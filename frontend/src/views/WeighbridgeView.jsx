@@ -235,7 +235,11 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
   const [vehicleNo, setVehicleNo] = useState(() => editEntry?.vehicle_no || '');
   const [grossLoaded, setGrossLoaded] = useState(() => String(editEntry?.gross_loaded_kg || ''));
   const [emptyTare, setEmptyTare] = useState(() => String(editEntry?.empty_tare_kg || ''));
-  const [iceWater, setIceWater] = useState(() => String(editEntry?.ice_water_kg || '0'));
+  const [iceWater, setIceWater] = useState(() =>
+    editEntry && editEntry.ice_water_kg !== undefined && editEntry.ice_water_kg !== null
+      ? String(editEntry.ice_water_kg)
+      : ''
+  );
 
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');

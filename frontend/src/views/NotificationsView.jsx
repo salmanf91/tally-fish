@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, CheckCircle2, ShieldCheck, Send, AlertTriangle } from 'lucide-react';
+import { Bell, CheckCircle2, ShieldCheck, Send, AlertTriangle, BellRing, Lock, Smartphone } from 'lucide-react';
 import { api } from '../services/api';
 import { useBranch } from '../context/BranchContext';
 
@@ -86,6 +86,21 @@ export default function NotificationsView() {
     }
   };
 
+  const [testingAlert, setTestingAlert] = useState(false);
+
+  const handleSendTestAlert = async (delaySeconds = 0) => {
+    setTestingAlert(true);
+    setErrorMessage('');
+    try {
+      const res = await api.post('/notifications/test', { delaySeconds });
+      setStatusMessage(res.message || 'Test alert sent to your device!');
+    } catch (err) {
+      setErrorMessage(err.message || 'Failed to send test alert');
+    } finally {
+      setTestingAlert(false);
+    }
+  };
+
   return (
     <div className="space-y-4 max-w-5xl mx-auto">
       {/* Header */}
@@ -162,6 +177,44 @@ export default function NotificationsView() {
             ? 'Re-Sync Push Subscription'
             : 'Enable Real-time Web Push Alerts'}
         </button>
+
+        {/* Live Phone Testing Controls */}
+        {isSubscribed && (
+          <div className="pt-3 border-t border-slate-100 space-y-3">
+            <div className="flex items-center gap-2">
+              <Smartphone className="w-4 h-4 text-amber-600" />
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                Test Phone Notifications (Lock Screen &amp; Status Bar)
+              </h4>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => handleSendTestAlert(0)}
+                disabled={testingAlert}
+                className="py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition-all flex items-center justify-center gap-2 border border-slate-200"
+              >
+                <BellRing className="w-4 h-4 text-amber-600" />
+                <span>Instant Phone Alert Test</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleSendTestAlert(5)}
+                disabled={testingAlert}
+                className="py-2.5 px-3 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-bold transition-all flex items-center justify-center gap-2 border border-amber-300"
+              >
+                <Lock className="w-4 h-4 text-amber-700" />
+                <span>Test Lock Screen (in 5 sec)</span>
+              </button>
+            </div>
+
+            <p className="text-[11px] text-slate-500 leading-normal bg-slate-50 p-3 rounded-xl border border-slate-200/70">
+              📱 <strong>How to test on Lock Screen:</strong> Tap <em>"Test Lock Screen (in 5 sec)"</em> and immediately press your phone's power button to lock the screen. In 5 seconds, your phone will chime/vibrate and display the alert on your lock screen.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
