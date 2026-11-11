@@ -238,6 +238,12 @@ async function createUser(req, res, next) {
 
     const pinHash = await bcrypt.hash(pinStr, 10);
 
+    const rolesToAssign = Array.isArray(branch_roles) && branch_roles.length > 0
+      ? branch_roles
+      : req.body.branch_id && req.body.role
+      ? [{ branch_id: req.body.branch_id, role: req.body.role }]
+      : [];
+
     const result = await db.withTransaction(async (client) => {
       const userRes = await client.query(
         `
@@ -250,8 +256,8 @@ async function createUser(req, res, next) {
 
       const newUser = userRes.rows[0];
 
-      if (Array.isArray(branch_roles) && branch_roles.length > 0) {
-        for (const br of branch_roles) {
+      if (rolesToAssign.length > 0) {
+        for (const br of rolesToAssign) {
           if (br.branch_id && br.role) {
             await client.query(
               `
@@ -271,13 +277,40 @@ async function createUser(req, res, next) {
           action: 'USER_CREATED',
           entityType: 'users',
           entityId: newUser.id,
-          diffs: { username: newUser.username, branch_roles },
+          diffs: { username: newUser.username, branch_roles: rolesToAssign },
           ipAddress: req.ip,
         },
         client
       );
 
-      return newUser;
+      const userFullRes = await client.query(`
+        SELECT 
+          u.id, 
+          u.username, 
+          u.is_active, 
+          u.failed_attempts,
+          u.locked_until,
+          u.created_at,
+          COALESCE(
+            json_agg(
+              json_build_object(
+                'id', ubr.id,
+                'branch_id', ubr.branch_id,
+                'branch_name', b.name,
+                'branch_code', b.code,
+                'role', ubr.role
+              )
+            ) FILTER (WHERE ubr.id IS NOT NULL),
+            '[]'::json
+          ) as branch_roles
+        FROM users u
+        LEFT JOIN user_branch_roles ubr ON ubr.user_id = u.id
+        LEFT JOIN branches b ON b.id = ubr.branch_id AND b.is_active = true
+        WHERE u.id = $1
+        GROUP BY u.id
+      `, [newUser.id]);
+
+      return userFullRes.rows[0];
     }, { actorId: req.user.id });
 
     return res.status(201).json({
@@ -352,10 +385,257 @@ async function resetUserPin(req, res, next) {
   }
 }
 
+/**
+ * GET /api/auth/users
+ * Admin endpoint: List all users with their branch roles
+ */
+async function listUsers(req, res, next) {
+  try {
+    const result = await db.query(`
+      SELECT 
+        u.id, 
+        u.username, 
+        u.is_active, 
+        u.failed_attempts,
+        u.locked_until,
+        u.created_at,
+        u.updated_at,
+        COALESCE(
+          json_agg(
+            json_build_object(
+              'id', ubr.id,
+              'branch_id', ubr.branch_id,
+              'branch_name', b.name,
+              'branch_code', b.code,
+              'role', ubr.role
+            )
+          ) FILTER (WHERE ubr.id IS NOT NULL),
+          '[]'::json
+        ) as branch_roles
+      FROM users u
+      LEFT JOIN user_branch_roles ubr ON ubr.user_id = u.id
+      LEFT JOIN branches b ON b.id = ubr.branch_id AND b.is_active = true
+      GROUP BY u.id
+      ORDER BY u.created_at ASC
+    `);
+
+    return res.status(200).json({
+      success: true,
+      data: result.rows,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * GET /api/auth/branches
+ * List all active operating branches
+ */
+async function listBranches(req, res, next) {
+  try {
+    const result = await db.query(
+      'SELECT id, name, code, is_active FROM branches WHERE is_active = true ORDER BY name ASC'
+    );
+    return res.status(200).json({
+      success: true,
+      data: result.rows,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * PUT /api/auth/users/:id
+ * Admin endpoint: Update a user's username, active status, PIN, and/or branch roles
+ */
+async function updateUser(req, res, next) {
+  try {
+    const { id } = req.params;
+    const { username, is_active, pin, branch_roles, branch_id, role } = req.body;
+
+    const result = await db.withTransaction(async (client) => {
+      const existingRes = await client.query('SELECT id, username, is_active FROM users WHERE id = $1', [id]);
+      if (existingRes.rows.length === 0) {
+        const err = new Error('User not found');
+        err.statusCode = 404;
+        throw err;
+      }
+
+      const updates = [];
+      const values = [];
+      let valIdx = 1;
+
+      if (username && username.trim()) {
+        updates.push(`username = $${valIdx++}`);
+        values.push(username.trim());
+      }
+      if (typeof is_active === 'boolean') {
+        updates.push(`is_active = $${valIdx++}`);
+        values.push(is_active);
+      }
+      if (pin) {
+        const pinStr = String(pin).trim();
+        if (!/^\d{4}$/.test(pinStr)) {
+          const err = new Error('PIN must be exactly 4 numeric digits');
+          err.statusCode = 400;
+          throw err;
+        }
+        const pinHash = await bcrypt.hash(pinStr, 10);
+        updates.push(`pin_hash = $${valIdx++}`);
+        values.push(pinHash);
+        updates.push(`failed_attempts = 0`);
+        updates.push(`locked_until = NULL`);
+      }
+
+      if (updates.length > 0) {
+        updates.push(`updated_at = CURRENT_TIMESTAMP`);
+        values.push(id);
+        await client.query(
+          `UPDATE users SET ${updates.join(', ')} WHERE id = $${valIdx}`,
+          values
+        );
+      }
+
+      // Handle branch roles assignment
+      let rolesToAssign = null;
+      if (Array.isArray(branch_roles)) {
+        rolesToAssign = branch_roles;
+      } else if (branch_id && role) {
+        rolesToAssign = [{ branch_id, role }];
+      }
+
+      if (rolesToAssign !== null) {
+        await client.query('DELETE FROM user_branch_roles WHERE user_id = $1', [id]);
+        for (const br of rolesToAssign) {
+          if (br.branch_id && br.role) {
+            await client.query(
+              `
+              INSERT INTO user_branch_roles (id, user_id, branch_id, role)
+              VALUES (gen_random_uuid(), $1, $2, $3)
+              ON CONFLICT (user_id, branch_id, role) DO NOTHING
+              `,
+              [id, br.branch_id, br.role]
+            );
+          }
+        }
+      }
+
+      await recordAuditLog(
+        {
+          actorId: req.user.id,
+          action: 'USER_UPDATED',
+          entityType: 'users',
+          entityId: id,
+          diffs: { username, is_active, branch_roles: rolesToAssign },
+          ipAddress: req.ip,
+        },
+        client
+      );
+
+      const updatedUserRes = await client.query(`
+        SELECT 
+          u.id, 
+          u.username, 
+          u.is_active, 
+          u.failed_attempts,
+          u.locked_until,
+          u.created_at,
+          u.updated_at,
+          COALESCE(
+            json_agg(
+              json_build_object(
+                'id', ubr.id,
+                'branch_id', ubr.branch_id,
+                'branch_name', b.name,
+                'branch_code', b.code,
+                'role', ubr.role
+              )
+            ) FILTER (WHERE ubr.id IS NOT NULL),
+            '[]'::json
+          ) as branch_roles
+        FROM users u
+        LEFT JOIN user_branch_roles ubr ON ubr.user_id = u.id
+        LEFT JOIN branches b ON b.id = ubr.branch_id AND b.is_active = true
+        WHERE u.id = $1
+        GROUP BY u.id
+      `, [id]);
+
+      return updatedUserRes.rows[0];
+    }, { actorId: req.user.id });
+
+    return res.status(200).json({
+      success: true,
+      user: result,
+      message: 'User updated successfully',
+    });
+  } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ success: false, error: err.message });
+    }
+    if (err.code === '23505') {
+      return res.status(409).json({ success: false, error: 'Username already exists' });
+    }
+    next(err);
+  }
+}
+
+/**
+ * DELETE /api/auth/users/:id
+ * Admin endpoint: Deactivate a user account
+ */
+async function deleteUser(req, res, next) {
+  try {
+    const { id } = req.params;
+
+    if (id === req.user.id) {
+      return res.status(400).json({
+        success: false,
+        error: 'Cannot deactivate your own active session account',
+      });
+    }
+
+    const result = await db.query(
+      `
+      UPDATE users
+      SET is_active = false, updated_at = CURRENT_TIMESTAMP
+      WHERE id = $1
+      RETURNING id, username, is_active
+      `,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    await recordAuditLog({
+      actorId: req.user.id,
+      action: 'USER_DEACTIVATED',
+      entityType: 'users',
+      entityId: id,
+      diffs: { is_active: false },
+      ipAddress: req.ip,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: `User "${result.rows[0].username}" deactivated successfully.`,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   login,
   getCurrentUser,
   createUser,
   resetUserPin,
+  listUsers,
+  listBranches,
+  updateUser,
+  deleteUser,
 };
 
