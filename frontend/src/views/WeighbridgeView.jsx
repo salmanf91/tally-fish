@@ -213,18 +213,13 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
   const [otherFishInput, setOtherFishInput] = useState('');
   const [showOtherInput, setShowOtherInput] = useState(false);
 
-  // Compute incrementally auto-generated slip number
+  // Compute incrementally auto-generated slip number across all entries regardless of day
   const nextDailySlNo = useMemo(() => {
     if (editEntry?.daily_sl_no) return editEntry.daily_sl_no;
-    const targetDate = entryDate || getLocalDateString();
-    const dateEntries = (entriesList || []).filter((e) => {
-      const eDate = e.entry_date ? e.entry_date.split('T')[0] : '';
-      return eDate === targetDate;
-    });
-    if (dateEntries.length === 0) return 1;
-    const maxSl = Math.max(...dateEntries.map((e) => Number(e.daily_sl_no) || 0), 0);
+    if (!entriesList || entriesList.length === 0) return 1;
+    const maxSl = Math.max(...entriesList.map((e) => Number(e.daily_sl_no) || 0), 0);
     return maxSl + 1;
-  }, [editEntry, entriesList, entryDate]);
+  }, [editEntry, entriesList]);
 
   const autoSlipNo = useMemo(() => {
     if (editEntry?.slip_no) return editEntry.slip_no;
