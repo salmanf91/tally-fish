@@ -383,7 +383,7 @@ export default function TodayView({ onNewEntry, onEditEntry, onViewLockedEntry }
                     {entry.remarks || `Truck: ${entry.vehicle_no}`}
                   </p>
 
-                  <div className="flex items-center justify-between gap-2 mt-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2 mt-2 pt-2 border-t border-slate-100">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       {isLocked ? (
                         <>
@@ -418,14 +418,14 @@ export default function TodayView({ onNewEntry, onEditEntry, onViewLockedEntry }
 
                     {/* Quick Edit & Delete Actions */}
                     {(!isLocked || !isStaff) && (
-                      <div className="flex items-center gap-1 shrink-0">
+                      <div className="flex items-center gap-1.5 shrink-0 ml-auto">
                         <button
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
                             onEditEntry(entry);
                           }}
-                          className="px-2 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-[11px] flex items-center gap-1 transition-colors shadow-2xs"
+                          className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs flex items-center gap-1 transition-colors shadow-2xs"
                           title="Edit intake slip"
                         >
                           <Edit3 className="w-3 h-3 text-slate-500" />
@@ -437,7 +437,7 @@ export default function TodayView({ onNewEntry, onEditEntry, onViewLockedEntry }
                             e.stopPropagation();
                             setDeleteTarget(entry);
                           }}
-                          className="px-2 py-1 rounded-lg border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-[11px] flex items-center gap-1 transition-colors shadow-2xs"
+                          className="px-2.5 py-1.5 rounded-lg border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs flex items-center gap-1 transition-colors shadow-2xs"
                           title="Delete intake slip"
                         >
                           <Trash2 className="w-3 h-3 text-rose-600" />

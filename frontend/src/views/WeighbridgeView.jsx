@@ -216,15 +216,15 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
   // Compute incrementally auto-generated slip number
   const nextDailySlNo = useMemo(() => {
     if (editEntry?.daily_sl_no) return editEntry.daily_sl_no;
-    const todayStr = new Date().toISOString().split('T')[0];
-    const todayEntries = (entriesList || []).filter((e) => {
-      const eDate = e.entry_date ? new Date(e.entry_date).toISOString().split('T')[0] : '';
-      return eDate === todayStr;
+    const targetDate = entryDate || getLocalDateString();
+    const dateEntries = (entriesList || []).filter((e) => {
+      const eDate = e.entry_date ? e.entry_date.split('T')[0] : '';
+      return eDate === targetDate;
     });
-    if (todayEntries.length === 0) return 1;
-    const maxSl = Math.max(...todayEntries.map((e) => e.daily_sl_no || 0), 0);
+    if (dateEntries.length === 0) return 1;
+    const maxSl = Math.max(...dateEntries.map((e) => Number(e.daily_sl_no) || 0), 0);
     return maxSl + 1;
-  }, [editEntry, entriesList]);
+  }, [editEntry, entriesList, entryDate]);
 
   const autoSlipNo = useMemo(() => {
     if (editEntry?.slip_no) return editEntry.slip_no;
@@ -237,7 +237,10 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
   const [grossLoaded, setGrossLoaded] = useState(() => String(editEntry?.gross_loaded_kg || ''));
   const [emptyTare, setEmptyTare] = useState(() => String(editEntry?.empty_tare_kg || ''));
   const [iceWater, setIceWater] = useState(() =>
-    editEntry && editEntry.ice_water_kg !== undefined && editEntry.ice_water_kg !== null
+    editEntry &&
+    editEntry.ice_water_kg !== undefined &&
+    editEntry.ice_water_kg !== null &&
+    Number(editEntry.ice_water_kg) > 0
       ? String(editEntry.ice_water_kg)
       : ''
   );
@@ -604,12 +607,12 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
 
           {/* Box Header columns */}
           {lines.length > 0 && (
-            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-slate-400 px-2">
-              <span className="flex-1">Fish</span>
-              <span className="w-14 text-center">Boxes</span>
-              <span className="w-12 text-center">%</span>
-              <span className="w-14 text-center">Count</span>
-              <span className="w-6"></span>
+            <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1 sm:px-2">
+              <span className="flex-1 min-w-[70px]">Fish</span>
+              <span className="w-12 sm:w-14 text-center">Boxes</span>
+              <span className="w-11 sm:w-12 text-center">%</span>
+              <span className="w-12 sm:w-14 text-center">Count</span>
+              <span className="w-5 sm:w-6"></span>
             </div>
           )}
 
@@ -622,10 +625,10 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
               const isComplete = totalPct === 100;
 
               return (
-                <div key={li} className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+                <div key={li} className="p-2.5 sm:p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
                   {line.parts.map((part, pi) => (
-                    <div key={pi} className="flex items-center gap-2">
-                      <span className="flex-1 text-xs font-bold text-slate-900 truncate">
+                    <div key={pi} className="flex items-center gap-1.5 sm:gap-2">
+                      <span className="flex-1 min-w-[70px] text-xs font-bold text-slate-900 truncate">
                         {part.fish}
                       </span>
 
@@ -639,10 +642,10 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
                           placeholder="0"
                           value={line.boxes}
                           onChange={(e) => handleUpdateBoxCount(li, e.target.value)}
-                          className="w-14 bg-white border border-slate-300 rounded-lg py-1.5 text-center font-mono font-bold text-xs text-slate-900"
+                          className="w-12 sm:w-14 bg-white border border-slate-300 rounded-lg py-1.5 text-center font-mono font-bold text-xs text-slate-900"
                         />
                       ) : (
-                        <span className="w-14 text-center text-[10px] text-slate-400 font-medium">
+                        <span className="w-12 sm:w-14 text-center text-[9px] sm:text-[10px] text-slate-400 font-medium truncate">
                           same box
                         </span>
                       )}
@@ -656,7 +659,9 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
                         placeholder="%"
                         value={part.pct}
                         onChange={(e) => handleUpdatePartPct(li, pi, e.target.value)}
-                        className="w-12 bg-white border border-slate-300 rounded-lg py-1.5 text-center font-mono font-bold text-xs text-slate-900"
+                        className={`w-11 sm:w-12 border rounded-lg py-1.5 text-center font-mono font-bold text-xs ${
+                          isOver ? 'bg-rose-50 border-rose-400 text-rose-900' : 'bg-white border-slate-300 text-slate-900'
+                        }`}
                       />
 
                       {/* Count / C value */}
@@ -668,21 +673,21 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
                         placeholder="0"
                         value={part.c}
                         onChange={(e) => handleUpdatePartCount(li, pi, e.target.value)}
-                        className="w-14 bg-white border border-slate-300 rounded-lg py-1.5 text-center font-mono font-bold text-xs text-slate-900"
+                        className="w-12 sm:w-14 bg-white border border-slate-300 rounded-lg py-1.5 text-center font-mono font-bold text-xs text-slate-900"
                       />
 
                       {/* Remove button */}
                       <button
                         type="button"
                         onClick={() => handleRemovePart(li, pi)}
-                        className="w-6 text-slate-400 hover:text-rose-600 text-sm font-bold"
+                        className="w-5 sm:w-6 text-slate-400 hover:text-rose-600 text-sm font-bold flex items-center justify-center"
                       >
                         ×
                       </button>
                     </div>
                   ))}
 
-                  <div className="flex items-center justify-between pt-1 text-[11px]">
+                  <div className="flex flex-wrap items-center justify-between gap-1 pt-1 text-[11px]">
                     {isOver ? (
                       <span className="text-rose-700 font-bold">
                         ✗ Mix exceeds 100% (currently {totalPct}%)

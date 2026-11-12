@@ -493,7 +493,7 @@ export default function StatementView({ onNavigateToRates, onNewEntry, onEditEnt
       return [
         idx + 1,
         escapeCSV(dateStr),
-        escapeCSV(e.slip_no || `SL-${e.daily_sl_no || idx + 1}`),
+        escapeCSV(e.daily_sl_no ? `SL-${String(e.daily_sl_no).padStart(3, '0')}` : (e.slip_no || `SL-${idx + 1}`)),
         escapeCSV(e.party_name),
         escapeCSV(e.vehicle_no || ''),
         parseFloat(e.gross_loaded_kg) || 0,
@@ -601,7 +601,7 @@ export default function StatementView({ onNavigateToRates, onNewEntry, onEditEnt
           <tr>
             <td style="text-align: center; font-weight: bold;">${idx + 1}</td>
             <td>${dateStr}</td>
-            <td style="font-family: monospace;">${e.slip_no || `#${e.daily_sl_no || idx + 1}`}</td>
+            <td style="font-family: monospace;">${e.daily_sl_no ? `SL-${String(e.daily_sl_no).padStart(3, '0')}` : (e.slip_no || `#${idx + 1}`)}</td>
             <td><strong>${e.party_name}</strong></td>
             <td style="font-family: monospace;">${e.vehicle_no || ''}</td>
             <td style="text-align: right; font-family: monospace;">${Number(e.gross_loaded_kg || 0).toLocaleString()}</td>
@@ -1093,7 +1093,7 @@ export default function StatementView({ onNavigateToRates, onNewEntry, onEditEnt
       </div>
 
       {/* Procurement Slips Table */}
-      <div className="light-card rounded-2xl overflow-hidden">
+      <div className="light-card rounded-2xl overflow-hidden overflow-x-auto">
         {filteredEntries.length === 0 ? (
           <div className="p-8 text-center space-y-3">
             <p className="text-slate-500 text-xs font-medium">
@@ -1135,8 +1135,8 @@ export default function StatementView({ onNavigateToRates, onNewEntry, onEditEnt
                 const needsRate = e.status === 'RATE_PENDING';
                 return (
                   <tr key={e.id} className="hover:bg-slate-50/50">
-                    <td className="py-3 px-3 font-mono font-bold text-slate-500">
-                      {idx + 1}
+                    <td className="py-3 px-3 font-mono font-bold text-slate-700 whitespace-nowrap">
+                      {e.daily_sl_no ? `SL-${String(e.daily_sl_no).padStart(3, '0')}` : `#${idx + 1}`}
                     </td>
                     <td className="py-3 px-3">
                       <strong className="text-slate-900 block text-sm">{e.party_name}</strong>
