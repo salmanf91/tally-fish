@@ -23,6 +23,27 @@ async function startServer() {
       console.warn('[Database] Schema auto-heal notice:', patchErr.message);
     }
 
+    // Auto-heal schema: Monotonic slip numbering across all days per branch
+    try {
+      await db.query('ALTER TABLE entries DROP CONSTRAINT IF EXISTS uq_entries_branch_date_sl_no');
+      await db.query(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint WHERE conname = 'uq_entries_branch_sl_no'
+          ) THEN
+            ALTER TABLE entries ADD CONSTRAINT uq_entries_branch_sl_no UNIQUE (branch_id, daily_sl_no);
+          END IF;
+        END $$;
+      `);
+    } catch (patchErr) {
+      console.warn('[Database] Schema auto-heal notice for slip numbering:', patchErr.message);
+    }
+
+    // Auto-initialize Hybrid RBAC system roles and permission policies
+    const { initRbac } = require('./db/initRbac');
+    await initRbac();
+
     app.listen(PORT, () => {
       console.log(`[Server] Tally Fish Backend API running on port ${PORT} (${config.nodeEnv})`);
       console.log(`[Server] Health check available at http://localhost:${PORT}/api/health`);

@@ -257,31 +257,33 @@ export default function BillingView({ onEditRates, onNewEntry, onEditEntry }) {
                 </div>
 
                 {/* Action Buttons for Billing Admin */}
-                <div className="grid grid-cols-3 gap-2 mt-2">
+                <div className="flex flex-wrap items-center gap-2 mt-2 pt-2 border-t border-slate-100">
                   {onEditEntry && (
                     <button
                       type="button"
                       onClick={() => onEditEntry(entry)}
-                      className="py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 font-bold text-xs hover:bg-slate-100 flex items-center justify-center gap-1.5 shadow-2xs transition-colors"
+                      className="flex-1 min-w-[95px] py-2 px-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 font-bold text-xs hover:bg-slate-100 flex items-center justify-center gap-1.5 shadow-2xs transition-colors"
                     >
-                      <Edit3 className="w-3.5 h-3.5 text-slate-500" /> Edit Slip
+                      <Edit3 className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Edit Slip</span>
                     </button>
                   )}
                   <button
                     type="button"
                     onClick={() => onEditRates(entry.id)}
-                    className={`py-2 rounded-xl bg-white border border-amber-300 text-amber-900 font-bold text-xs hover:bg-amber-50 flex items-center justify-center gap-1.5 shadow-2xs transition-colors ${
-                      !onEditEntry ? 'col-span-2' : ''
-                    }`}
+                    className="flex-1 min-w-[95px] py-2 px-2.5 rounded-xl bg-white border border-amber-300 text-amber-900 font-bold text-xs hover:bg-amber-50 flex items-center justify-center gap-1.5 shadow-2xs transition-colors"
                   >
-                    <BadgeDollarSign className="w-3.5 h-3.5 text-amber-600" /> Edit Rates
+                    <BadgeDollarSign className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Edit Rates</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setDeleteTarget(entry)}
-                    className="py-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 font-bold text-xs hover:bg-rose-100 flex items-center justify-center gap-1.5 shadow-2xs transition-colors"
+                    className="py-2 px-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 font-bold text-xs hover:bg-rose-100 flex items-center justify-center gap-1 shadow-2xs transition-colors ml-auto sm:ml-0"
+                    title="Delete Slip"
                   >
-                    <Trash2 className="w-3.5 h-3.5 text-rose-600" /> Delete
+                    <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                    <span className="sm:inline">Delete</span>
                   </button>
                 </div>
               </div>

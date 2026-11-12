@@ -66,9 +66,10 @@ function requireBranchRole(allowedRoles = []) {
       // Check if user has an active role in this branch
       const roleResult = await db.query(
         `
-        SELECT ubr.role, b.is_active as branch_active
+        SELECT ubr.role, b.is_active as branch_active, r.name as role_name, r.permissions
         FROM user_branch_roles ubr
         JOIN branches b ON b.id = ubr.branch_id
+        LEFT JOIN roles r ON r.id = ubr.role
         WHERE ubr.user_id = $1 AND ubr.branch_id = $2
         `,
         [req.user.id, branchId]
@@ -81,7 +82,7 @@ function requireBranchRole(allowedRoles = []) {
         });
       }
 
-      const { role: userRole, branch_active } = roleResult.rows[0];
+      const { role: userRole, branch_active, role_name, permissions: rawPermissions } = roleResult.rows[0];
 
       if (!branch_active) {
         return res.status(403).json({
@@ -90,19 +91,40 @@ function requireBranchRole(allowedRoles = []) {
         });
       }
 
-      // Direct exact role check against allowed roles
+      const userPermissions = Array.isArray(rawPermissions)
+        ? rawPermissions
+        : typeof rawPermissions === 'string'
+        ? JSON.parse(rawPermissions)
+        : userRole === 'owner'
+        ? ['*']
+        : [];
+
+      // Hybrid RBAC evaluation:
+      // Allowed if:
+      // 1. userRole === 'owner' (wildcard authority)
+      // 2. OR userPermissions contains '*'
+      // 3. OR allowedRoles includes userRole (backward compatibility with legacy role strings)
+      // 4. OR allowedRoles matches any permission key assigned to the user
       if (Array.isArray(allowedRoles) && allowedRoles.length > 0) {
-        if (!allowedRoles.includes(userRole)) {
+        const hasAccess =
+          userRole === 'owner' ||
+          userPermissions.includes('*') ||
+          allowedRoles.includes(userRole) ||
+          allowedRoles.some((reqPerm) => userPermissions.includes(reqPerm));
+
+        if (!hasAccess) {
           return res.status(403).json({
             success: false,
-            error: `Access denied. Role "${userRole}" is not authorized for this action. Allowed: [${allowedRoles.join(', ')}]`,
+            error: `Access denied. Role "${role_name || userRole}" is not authorized for this action.`,
           });
         }
       }
 
-      // Attach branch context to request
+      // Attach branch and RBAC context to request
       req.branchId = branchId;
       req.currentRole = userRole;
+      req.roleName = role_name || userRole;
+      req.userPermissions = userPermissions;
       next();
     } catch (err) {
       next(err);
@@ -110,7 +132,15 @@ function requireBranchRole(allowedRoles = []) {
   };
 }
 
+/**
+ * Middleware: Requires a specific granular permission for the active branch
+ */
+function requirePermission(requiredPermission) {
+  return requireBranchRole([requiredPermission]);
+}
+
 module.exports = {
   authenticateToken,
   requireBranchRole,
+  requirePermission,
 };

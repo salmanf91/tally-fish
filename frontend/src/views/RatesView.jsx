@@ -469,23 +469,23 @@ export default function RatesView({ initialEntryId = null, onDone }) {
                     <div
                       key={p.key}
                       onClick={() => setActivePartKey(p.key)}
-                      className={`p-3 rounded-xl border transition-all cursor-pointer select-none flex items-center justify-between ${
+                      className={`p-3 rounded-xl border transition-all cursor-pointer select-none flex items-center justify-between gap-2 ${
                         isFocused
                           ? 'bg-amber-50/70 border-amber-400 ring-2 ring-amber-100 shadow-sm'
                           : 'bg-slate-50/60 border-slate-200 hover:border-slate-300'
                       }`}
                     >
-                      <div>
+                      <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <h4 className="font-bold text-sm text-slate-900">{p.fish}</h4>
+                          <h4 className="font-bold text-sm text-slate-900 truncate">{p.fish}</h4>
                           {isMixedLot && (
-                            <span className="text-xs font-mono font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                            <span className="text-xs font-mono font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 shrink-0">
                               {p.pct}%
                             </span>
                           )}
                         </div>
                         {(p.fish_count || p.lastRate) && (
-                          <p className="text-xs text-slate-500 mt-0.5">
+                          <p className="text-xs text-slate-500 mt-0.5 truncate">
                             {p.fish_count ? `${p.fish_count} count` : ''}
                             {p.fish_count && p.lastRate ? ' · ' : ''}
                             {p.lastRate ? `last ₹${p.lastRate}/kg` : ''}
@@ -493,7 +493,7 @@ export default function RatesView({ initialEntryId = null, onDone }) {
                         )}
                       </div>
 
-                      <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
                         <span className="text-base font-bold text-slate-500 font-mono">₹</span>
                         <input
                           type="number"
@@ -507,7 +507,7 @@ export default function RatesView({ initialEntryId = null, onDone }) {
                             setActivePartKey(p.key);
                             setRatesMap((prev) => ({ ...prev, [p.key]: e.target.value }));
                           }}
-                          className={`w-24 text-right text-base font-mono font-black text-slate-900 bg-white border rounded-xl px-2.5 py-1 focus:outline-none ${
+                          className={`w-20 sm:w-24 text-right text-base font-mono font-black text-slate-900 bg-white border rounded-xl px-2 py-1 focus:outline-none ${
                             isFocused
                               ? 'border-amber-500 ring-2 ring-amber-400'
                               : 'border-slate-300'
@@ -522,7 +522,7 @@ export default function RatesView({ initialEntryId = null, onDone }) {
 
               {/* Lot Weighted Average Banner (Mixed Lots only) */}
               {isMixedLot && (
-                <div className="pt-2 border-t border-dashed border-slate-200 flex items-center justify-between text-xs">
+                <div className="pt-2 border-t border-dashed border-slate-200 flex flex-wrap items-center justify-between gap-1 text-xs">
                   <span className="text-slate-600 font-medium">Weighted avg rate for this mixed box:</span>
                   <span className="font-mono font-bold text-blue-800 text-sm">
                     {lotAvgRate && Number(lotAvgRate) > 0 ? `₹${lotAvgRate} / kg` : '—'}

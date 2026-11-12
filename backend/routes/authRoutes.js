@@ -46,4 +46,42 @@ router.post(
   authController.resetUserPin
 );
 
+// =============================================================================
+// ROLES & HYBRID RBAC (/api/auth/roles & /api/auth/permissions)
+// =============================================================================
+router.get(
+  '/roles',
+  authenticateToken,
+  requireBranchRole(['owner', 'billingAdmin', 'roles:manage', 'accounts:manage']),
+  authController.listRoles
+);
+
+router.get(
+  '/permissions',
+  authenticateToken,
+  requireBranchRole(['owner', 'billingAdmin', 'roles:manage', 'accounts:manage']),
+  authController.listPermissions
+);
+
+router.post(
+  '/roles',
+  authenticateToken,
+  requireBranchRole(['owner', 'roles:manage']),
+  authController.createRole
+);
+
+router.put(
+  '/roles/:id',
+  authenticateToken,
+  requireBranchRole(['owner', 'roles:manage']),
+  authController.updateRole
+);
+
+router.delete(
+  '/roles/:id',
+  authenticateToken,
+  requireBranchRole(['owner', 'roles:manage']),
+  authController.deleteRole
+);
+
 module.exports = router;

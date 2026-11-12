@@ -200,14 +200,14 @@ async function createEntry(req, res, next) {
         });
       }
 
-      // 4. Determine next atomic serial number for (branch_id, entry_date)
+      // 4. Determine next atomic serial number across branch (incremental regardless of day)
       const serialRes = await client.query(
         `
         SELECT COALESCE(MAX(daily_sl_no), 0) + 1 AS next_sl_no
         FROM entries
-        WHERE branch_id = $1 AND entry_date = $2
+        WHERE branch_id = $1
         `,
-        [branchId, targetDate]
+        [branchId]
       );
       const dailySlNo = parseInt(serialRes.rows[0].next_sl_no, 10);
 
@@ -313,6 +313,12 @@ async function createEntry(req, res, next) {
       data: entryResult,
     });
   } catch (err) {
+    if (err.code === '23505') {
+      return res.status(409).json({
+        success: false,
+        error: 'A slip with this serial number or record already exists. Please retry.',
+      });
+    }
     next(err);
   }
 }
@@ -833,14 +839,14 @@ async function syncEntries(req, res, next) {
             });
           }
 
-          // 4. Atomic serial allocation
+          // 4. Atomic serial allocation across branch (incremental regardless of day)
           const serialRes = await client.query(
             `
             SELECT COALESCE(MAX(daily_sl_no), 0) + 1 AS next_sl_no
             FROM entries
-            WHERE branch_id = $1 AND entry_date = $2
+            WHERE branch_id = $1
             `,
-            [branchId, targetDate]
+            [branchId]
           );
           const dailySlNo = parseInt(serialRes.rows[0].next_sl_no, 10);
 
