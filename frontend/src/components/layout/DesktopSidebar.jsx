@@ -105,7 +105,7 @@ export default function DesktopSidebar({ activeTab, onSelectTab, isOnline = true
       roles: ['owner'],
     },
 
-    // Billing Admin: Billing, Masters
+    // Billing Admin: Billing, Masters (Strictly Billing Department only, hidden for Owner)
     {
       id: 'billing',
       label: 'Billing',
@@ -113,13 +113,15 @@ export default function DesktopSidebar({ activeTab, onSelectTab, isOnline = true
       permission: 'billing:view',
       roles: ['billingAdmin'],
       badge: 'Approved',
+      hideForOwner: true,
     },
     {
       id: 'masters',
       label: 'Masters',
       icon: Users,
       permission: 'masters:view',
-      roles: ['billingAdmin', 'owner'],
+      roles: ['billingAdmin'],
+      hideForOwner: true,
     },
 
     // Global: Alerts
@@ -133,6 +135,11 @@ export default function DesktopSidebar({ activeTab, onSelectTab, isOnline = true
   ];
 
   const filteredNavItems = navItems.filter((item) => {
+    // Hide Billing and Masters from Owner view
+    if (role === 'owner' && item.hideForOwner) {
+      return false;
+    }
+
     if (item.id === 'today') {
       if (role === 'staffAdmin') return true;
       if (
