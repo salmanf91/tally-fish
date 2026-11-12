@@ -190,11 +190,30 @@ function MainApp() {
 
       {activeTab === 'notifications' && <NotificationsView />}
 
-      {/* Locked Entry Modal when clicked by staff */}
+      {/* Locked Entry Modal when clicked by staff or admin */}
       {lockedModalEntry && (
         <LockedSlipModal
           entry={lockedModalEntry}
           onClose={() => setLockedModalEntry(null)}
+          onEditEntry={
+            currentRole === 'owner' || currentRole === 'billingAdmin'
+              ? (entry) => {
+                  setEditingEntry(entry);
+                  setActiveTab('new');
+                }
+              : null
+          }
+          onDeleteEntry={
+            currentRole === 'owner' || currentRole === 'billingAdmin'
+              ? async (entry) => {
+                  if (window.confirm(`Are you sure you want to delete slip #${entry.slip_no || entry.daily_sl_no}?`)) {
+                    await api.delete(`/entries/${entry.id}`);
+                    await queryClient.invalidateQueries({ queryKey: ['entries'] });
+                    setLockedModalEntry(null);
+                  }
+                }
+              : null
+          }
         />
       )}
     </AppLayout>

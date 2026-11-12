@@ -497,6 +497,7 @@ export default function RatesView({ initialEntryId = null, onDone }) {
                         <span className="text-base font-bold text-slate-500 font-mono">₹</span>
                         <input
                           type="number"
+                          inputMode="decimal"
                           step="any"
                           min="0"
                           placeholder="0"

@@ -32,23 +32,32 @@ export default function MobileTouchHeader({ isOnline = true, onSelectTab }) {
   const [statusMessage, setStatusMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
 
-  // Fetch entries to count pending alerts and update home screen app badge
+  const currentRole = activeBranch?.role || 'staffAdmin';
+  const canSeeRateAlerts = currentRole === 'owner' || currentRole === 'billingAdmin';
+
+  // Fetch entries to count pending alerts and update home screen app badge (Only for Owner & Billing)
   const { data: entries = [] } = useQuery({
     queryKey: ['entries', activeBranchId],
     queryFn: async () => {
       const res = await api.get('/entries');
       return res.data || [];
     },
-    enabled: !!activeBranchId,
+    enabled: !!activeBranchId && canSeeRateAlerts,
   });
 
-  const pendingRateEntries = entries.filter((e) => e.status === 'RATE_PENDING');
+  const pendingRateEntries = canSeeRateAlerts
+    ? entries.filter((e) => e.status === 'RATE_PENDING')
+    : [];
   const alertCount = pendingRateEntries.length;
 
-  // Update PWA App Badge on mobile home screen whenever pending count changes
+  // Update PWA App Badge on mobile home screen whenever pending count changes (Owner & Billing only)
   useEffect(() => {
-    setAppBadgeCount(alertCount);
-  }, [alertCount]);
+    if (canSeeRateAlerts) {
+      setAppBadgeCount(alertCount);
+    } else {
+      setAppBadgeCount(0);
+    }
+  }, [alertCount, canSeeRateAlerts]);
 
   // Check if push notifications are enabled on this device
   useEffect(() => {
@@ -128,20 +137,22 @@ export default function MobileTouchHeader({ isOnline = true, onSelectTab }) {
               </div>
             )}
 
-            {/* Notification Bell Icon with Red Unread Badge */}
-            <button
-              type="button"
-              onClick={() => setDrawerOpen(true)}
-              className="relative p-1.5 rounded-lg bg-slate-100 border border-slate-200 text-slate-700 hover:text-amber-800 transition-colors"
-              title="Notifications"
-            >
-              <Bell className="w-4 h-4" />
-              {alertCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-rose-500 text-white text-[9px] font-black flex items-center justify-center animate-pulse shadow-sm">
-                  {alertCount > 9 ? '9+' : alertCount}
-                </span>
-              )}
-            </button>
+            {/* Notification Bell Icon with Red Unread Badge - Strictly for Owner and Billing Admin */}
+            {canSeeRateAlerts && (
+              <button
+                type="button"
+                onClick={() => setDrawerOpen(true)}
+                className="relative p-1.5 rounded-lg bg-slate-100 border border-slate-200 text-slate-700 hover:text-amber-800 transition-colors"
+                title="Notifications"
+              >
+                <Bell className="w-4 h-4" />
+                {alertCount > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-rose-500 text-white text-[9px] font-black flex items-center justify-center animate-pulse shadow-sm">
+                    {alertCount > 9 ? '9+' : alertCount}
+                  </span>
+                )}
+              </button>
+            )}
 
             {/* Online / Offline Status Badge */}
             <div

@@ -957,11 +957,70 @@ async function syncEntries(req, res, next) {
   }
 }
 
+/**
+ * DELETE /api/entries/:id
+ * Weighbridge staff can delete only before rate is fixed / locked.
+ * Admin and BillingAdmin can delete anytime (even after rates are set).
+ */
+async function deleteEntry(req, res, next) {
+  try {
+    const { id } = req.params;
+    const branchId = req.branchId;
+    const isStaff = req.currentRole === 'staffAdmin';
+
+    const existingRes = await db.query(
+      'SELECT * FROM entries WHERE id = $1 AND branch_id = $2',
+      [id, branchId]
+    );
+
+    if (existingRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Entry not found' });
+    }
+
+    const currentEntry = existingRes.rows[0];
+
+    const rateCheck = await db.query(
+      'SELECT COUNT(*)::int as count FROM entry_rates WHERE entry_id = $1',
+      [id]
+    );
+    const hasRates = rateCheck.rows[0].count > 0;
+
+    // Staff cannot delete once rates are set or slip is locked
+    if (isStaff && (currentEntry.status === 'LOCKED' || hasRates)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Locked for Staff: This entry has already been rate-fixed by Admin and cannot be deleted.',
+      });
+    }
+
+    // ON DELETE CASCADE automatically cleans up entry_boxes and entry_rates
+    await db.query('DELETE FROM entries WHERE id = $1', [id]);
+
+    await recordAuditLog({
+      actorId: req.user.id,
+      branchId: req.branchId,
+      action: 'ENTRY_DELETED',
+      entityType: 'entries',
+      entityId: id,
+      diffs: { deletedEntry: currentEntry, deletedByRole: req.currentRole },
+      ipAddress: req.ip,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: `Entry slip #${currentEntry.slip_no || currentEntry.daily_sl_no} deleted successfully.`,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   createEntry,
   getEntries,
   getEntryById,
   updateEntry,
+  deleteEntry,
   syncEntries,
 };
 
