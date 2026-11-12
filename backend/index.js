@@ -23,6 +23,10 @@ async function startServer() {
       console.warn('[Database] Schema auto-heal notice:', patchErr.message);
     }
 
+    // Auto-initialize Hybrid RBAC system roles and permission policies
+    const { initRbac } = require('./db/initRbac');
+    await initRbac();
+
     app.listen(PORT, () => {
       console.log(`[Server] Tally Fish Backend API running on port ${PORT} (${config.nodeEnv})`);
       console.log(`[Server] Health check available at http://localhost:${PORT}/api/health`);

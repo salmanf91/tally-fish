@@ -21,7 +21,14 @@ import { api } from '../../services/api';
 
 export default function DesktopSidebar({ activeTab, onSelectTab, isOnline = true }) {
   const { user, logout } = useAuth();
-  const { activeBranchId, activeBranch, availableBranches, setActiveBranchId } = useBranch();
+  const {
+    activeBranchId,
+    activeBranch,
+    availableBranches,
+    setActiveBranchId,
+    hasPermission,
+    currentRoleName,
+  } = useBranch();
 
   const role = activeBranch?.role || 'staffAdmin';
 
@@ -40,11 +47,14 @@ export default function DesktopSidebar({ activeTab, onSelectTab, isOnline = true
     return entries.filter((e) => e.status === 'RATE_PENDING').length;
   }, [entries]);
 
-  const roleTitle = {
-    owner: 'Owner / Administrator',
-    billingAdmin: 'Billing Department',
-    staffAdmin: 'Weighbridge Staff',
-  }[role] || 'Operator';
+  const roleTitle =
+    currentRoleName ||
+    {
+      owner: 'Owner / Administrator',
+      billingAdmin: 'Billing Department',
+      staffAdmin: 'Weighbridge Staff',
+    }[role] ||
+    role;
 
   const roleBadgeStyle = {
     owner: 'bg-amber-50 text-amber-800 border-amber-300',
@@ -54,24 +64,27 @@ export default function DesktopSidebar({ activeTab, onSelectTab, isOnline = true
 
   // Navigation Items tailored per role matching the workflow prototype
   const navItems = [
-    // Staff Admin: Today & New Entry only
+    // Staff Admin / Operator: Today
     {
       id: 'today',
       label: 'Today',
       icon: Clock,
+      permission: 'slips:view',
       roles: ['staffAdmin'],
     },
     {
       id: 'new',
       label: 'New entry',
       icon: PlusCircle,
+      permission: 'slips:create',
       roles: ['owner', 'billingAdmin', 'staffAdmin'],
     },
     {
       id: 'statement',
       label: 'Statement',
       icon: FileSpreadsheet,
-      roles: ['owner', 'billingAdmin'], // Removed staffAdmin per user request
+      permission: 'statement:view',
+      roles: ['owner', 'billingAdmin'],
     },
 
     // Owner: Set rate, Accounts
@@ -79,6 +92,7 @@ export default function DesktopSidebar({ activeTab, onSelectTab, isOnline = true
       id: 'rates',
       label: 'Set rate',
       icon: BadgeDollarSign,
+      permission: 'rates:set',
       roles: ['owner'],
       badge: pendingRatesCount > 0 ? `${pendingRatesCount} pending` : null,
       badgeColor: 'amber',
@@ -87,6 +101,7 @@ export default function DesktopSidebar({ activeTab, onSelectTab, isOnline = true
       id: 'accounts',
       label: 'Accounts',
       icon: UserCheck,
+      permission: ['accounts:manage', 'roles:manage'],
       roles: ['owner'],
     },
 
@@ -95,6 +110,7 @@ export default function DesktopSidebar({ activeTab, onSelectTab, isOnline = true
       id: 'billing',
       label: 'Billing',
       icon: Layers,
+      permission: 'billing:view',
       roles: ['billingAdmin'],
       badge: 'Approved',
     },
@@ -102,6 +118,7 @@ export default function DesktopSidebar({ activeTab, onSelectTab, isOnline = true
       id: 'masters',
       label: 'Masters',
       icon: Users,
+      permission: 'masters:view',
       roles: ['billingAdmin', 'owner'],
     },
 
@@ -110,11 +127,34 @@ export default function DesktopSidebar({ activeTab, onSelectTab, isOnline = true
       id: 'notifications',
       label: 'Alerts',
       icon: Bell,
+      permission: 'rates:view',
       roles: ['owner', 'billingAdmin'],
     },
   ];
 
-  const filteredNavItems = navItems.filter((item) => item.roles.includes(role));
+  const filteredNavItems = navItems.filter((item) => {
+    if (item.id === 'today') {
+      if (role === 'staffAdmin') return true;
+      if (
+        hasPermission &&
+        hasPermission('slips:view') &&
+        !hasPermission('statement:view') &&
+        !hasPermission('billing:view')
+      ) {
+        return true;
+      }
+      return false;
+    }
+
+    if (hasPermission && item.permission) {
+      if (Array.isArray(item.permission)) {
+        if (item.permission.some((p) => hasPermission(p))) return true;
+      } else if (hasPermission(item.permission)) {
+        return true;
+      }
+    }
+    return item.roles && item.roles.includes(role);
+  });
 
   return (
     <aside className="hidden desktop:flex flex-col w-64 h-full bg-white border-r border-slate-200 text-slate-800 select-none shrink-0 shadow-sm z-30">

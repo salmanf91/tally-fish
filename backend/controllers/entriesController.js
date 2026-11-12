@@ -313,6 +313,12 @@ async function createEntry(req, res, next) {
       data: entryResult,
     });
   } catch (err) {
+    if (err.code === '23505') {
+      return res.status(409).json({
+        success: false,
+        error: 'A slip with this serial number or record already exists. Please retry.',
+      });
+    }
     next(err);
   }
 }

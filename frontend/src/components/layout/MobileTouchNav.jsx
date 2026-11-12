@@ -11,7 +11,7 @@ import {
 import { useBranch } from '../../context/BranchContext';
 
 export default function MobileTouchNav({ activeTab, onSelectTab }) {
-  const { currentRole } = useBranch();
+  const { currentRole, hasPermission } = useBranch();
 
   let tabs = [];
 
@@ -29,12 +29,71 @@ export default function MobileTouchNav({ activeTab, onSelectTab }) {
       { id: 'new', label: 'New entry', icon: PlusCircle },
       { id: 'masters', label: 'Masters', icon: Users },
     ];
-  } else {
-    // Staff Admin
+  } else if (currentRole === 'staffAdmin') {
     tabs = [
       { id: 'today', label: 'Today', icon: Clock },
       { id: 'new', label: 'New entry', icon: PlusCircle },
     ];
+  } else {
+    // Custom Enterprise Roles: Dynamically build tabs from granted permissions
+    const candidateTabs = [
+      {
+        id: 'today',
+        label: 'Today',
+        icon: Clock,
+        visible:
+          hasPermission &&
+          hasPermission('slips:view') &&
+          !hasPermission('statement:view') &&
+          !hasPermission('billing:view'),
+      },
+      {
+        id: 'billing',
+        label: 'Billing',
+        icon: Layers,
+        visible: hasPermission && hasPermission('billing:view'),
+      },
+      {
+        id: 'statement',
+        label: 'Statement',
+        icon: FileSpreadsheet,
+        visible: hasPermission && hasPermission('statement:view'),
+      },
+      {
+        id: 'rates',
+        label: 'Set rate',
+        icon: BadgeDollarSign,
+        visible: hasPermission && hasPermission('rates:set'),
+      },
+      {
+        id: 'new',
+        label: 'New entry',
+        icon: PlusCircle,
+        visible: hasPermission && hasPermission('slips:create'),
+      },
+      {
+        id: 'masters',
+        label: 'Masters',
+        icon: Users,
+        visible: hasPermission && hasPermission('masters:view'),
+      },
+      {
+        id: 'accounts',
+        label: 'Accounts',
+        icon: UserCheck,
+        visible:
+          hasPermission &&
+          (hasPermission('accounts:manage') || hasPermission('roles:manage')),
+      },
+    ];
+
+    tabs = candidateTabs.filter((t) => t.visible);
+    if (tabs.length === 0) {
+      tabs = [
+        { id: 'today', label: 'Today', icon: Clock },
+        { id: 'new', label: 'New entry', icon: PlusCircle },
+      ];
+    }
   }
 
   return (

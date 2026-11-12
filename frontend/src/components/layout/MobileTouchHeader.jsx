@@ -24,7 +24,13 @@ import {
 
 export default function MobileTouchHeader({ isOnline = true, onSelectTab }) {
   const { user, logout } = useAuth();
-  const { activeBranch, availableBranches, activeBranchId, setActiveBranchId } = useBranch();
+  const {
+    activeBranch,
+    availableBranches,
+    activeBranchId,
+    setActiveBranchId,
+    hasPermission,
+  } = useBranch();
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [isSubscribed, setIsSubscribed] = useState(false);
@@ -33,7 +39,11 @@ export default function MobileTouchHeader({ isOnline = true, onSelectTab }) {
   const [errorMessage, setErrorMessage] = useState('');
 
   const currentRole = activeBranch?.role || 'staffAdmin';
-  const canSeeRateAlerts = currentRole === 'owner' || currentRole === 'billingAdmin';
+  const canSeeRateAlerts =
+    (hasPermission &&
+      (hasPermission('rates:view') || hasPermission('rates:set'))) ||
+    currentRole === 'owner' ||
+    currentRole === 'billingAdmin';
 
   // Fetch entries to count pending alerts and update home screen app badge (Only for Owner & Billing)
   const { data: entries = [] } = useQuery({

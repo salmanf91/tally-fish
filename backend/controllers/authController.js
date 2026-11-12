@@ -194,9 +194,16 @@ async function getCurrentUser(req, res, next) {
 
     const rolesResult = await db.query(
       `
-      SELECT ubr.branch_id, b.name as branch_name, b.code as branch_code, ubr.role
+      SELECT 
+        ubr.branch_id, 
+        b.name as branch_name, 
+        b.code as branch_code, 
+        ubr.role,
+        COALESCE(r.name, ubr.role) as role_name,
+        COALESCE(r.permissions, '[]'::jsonb) as permissions
       FROM user_branch_roles ubr
       JOIN branches b ON b.id = ubr.branch_id
+      LEFT JOIN roles r ON r.id = ubr.role
       WHERE ubr.user_id = $1 AND b.is_active = true
       ORDER BY b.name ASC
       `,
@@ -407,7 +414,8 @@ async function listUsers(req, res, next) {
               'branch_id', ubr.branch_id,
               'branch_name', b.name,
               'branch_code', b.code,
-              'role', ubr.role
+              'role', ubr.role,
+              'role_name', COALESCE(r.name, ubr.role)
             )
           ) FILTER (WHERE ubr.id IS NOT NULL),
           '[]'::json
@@ -415,6 +423,7 @@ async function listUsers(req, res, next) {
       FROM users u
       LEFT JOIN user_branch_roles ubr ON ubr.user_id = u.id
       LEFT JOIN branches b ON b.id = ubr.branch_id AND b.is_active = true
+      LEFT JOIN roles r ON r.id = ubr.role
       GROUP BY u.id
       ORDER BY u.created_at ASC
     `);
@@ -628,6 +637,235 @@ async function deleteUser(req, res, next) {
   }
 }
 
+/**
+ * GET /api/auth/roles
+ * Lists all system & custom roles with active user counts and permissions
+ */
+async function listRoles(req, res, next) {
+  try {
+    const result = await db.query(`
+      SELECT 
+        r.id,
+        r.name,
+        r.description,
+        r.is_system,
+        r.permissions,
+        r.created_at,
+        r.updated_at,
+        COUNT(DISTINCT ubr.user_id)::int as user_count
+      FROM roles r
+      LEFT JOIN user_branch_roles ubr ON ubr.role = r.id
+      GROUP BY r.id
+      ORDER BY r.is_system DESC, r.name ASC
+    `);
+
+    return res.status(200).json({
+      success: true,
+      data: result.rows,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * GET /api/auth/permissions
+ * Returns catalog of all supported module permission definitions
+ */
+async function listPermissions(req, res, next) {
+  try {
+    const { ALL_PERMISSIONS } = require('../db/initRbac');
+    return res.status(200).json({
+      success: true,
+      data: ALL_PERMISSIONS,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * POST /api/auth/roles
+ * Create a new custom role with granular permissions
+ */
+async function createRole(req, res, next) {
+  try {
+    const { id, name, description, permissions } = req.body;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({ success: false, error: 'Role name is required' });
+    }
+
+    // Generate unique slug for custom role
+    const rawSlug = id && id.trim()
+      ? id.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '_')
+      : name.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+
+    const roleId = rawSlug.startsWith('custom_') ? rawSlug : `custom_${rawSlug}`;
+
+    const existingRes = await db.query('SELECT id FROM roles WHERE id = $1', [roleId]);
+    if (existingRes.rows.length > 0) {
+      return res.status(409).json({ success: false, error: `Role identifier "${roleId}" already exists.` });
+    }
+
+    const perms = Array.isArray(permissions) ? permissions : [];
+
+    const insertRes = await db.query(
+      `
+      INSERT INTO roles (id, name, description, is_system, permissions)
+      VALUES ($1, $2, $3, false, $4)
+      RETURNING *
+      `,
+      [roleId, name.trim(), description ? description.trim() : null, JSON.stringify(perms)]
+    );
+
+    const newRole = insertRes.rows[0];
+
+    await recordAuditLog({
+      actorId: req.user.id,
+      branchId: req.branchId,
+      action: 'ROLE_CREATED',
+      entityType: 'roles',
+      entityId: null,
+      diffs: { role: newRole },
+      ipAddress: req.ip,
+    });
+
+    return res.status(201).json({
+      success: true,
+      data: newRole,
+      message: `Role "${newRole.name}" created successfully.`,
+    });
+  } catch (err) {
+    if (err.code === '23505') {
+      return res.status(409).json({ success: false, error: 'A role with this ID or name already exists.' });
+    }
+    next(err);
+  }
+}
+
+/**
+ * PUT /api/auth/roles/:id
+ * Update role name, description, or assigned permissions
+ */
+async function updateRole(req, res, next) {
+  try {
+    const { id } = req.params;
+    const { name, description, permissions } = req.body;
+
+    const existingRes = await db.query('SELECT * FROM roles WHERE id = $1', [id]);
+    if (existingRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Role not found' });
+    }
+
+    const currentRole = existingRes.rows[0];
+
+    // For system role 'owner', permissions must remain '*'
+    let resolvedPerms = permissions !== undefined ? permissions : currentRole.permissions;
+    if (currentRole.id === 'owner') {
+      resolvedPerms = ['*'];
+    }
+
+    const updateRes = await db.query(
+      `
+      UPDATE roles
+      SET
+        name = COALESCE($1::text, name),
+        description = CASE WHEN $2::text IS NOT NULL THEN $2::text ELSE description END,
+        permissions = $3,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = $4
+      RETURNING *
+      `,
+      [
+        name ? name.trim() : null,
+        description !== undefined ? description : null,
+        JSON.stringify(resolvedPerms),
+        id,
+      ]
+    );
+
+    const updatedRole = updateRes.rows[0];
+
+    await recordAuditLog({
+      actorId: req.user.id,
+      branchId: req.branchId,
+      action: 'ROLE_UPDATED',
+      entityType: 'roles',
+      entityId: null,
+      diffs: { old: currentRole, new: updatedRole },
+      ipAddress: req.ip,
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: updatedRole,
+      message: `Role "${updatedRole.name}" updated successfully.`,
+    });
+  } catch (err) {
+    if (err.code === '23505') {
+      return res.status(409).json({ success: false, error: 'A role with this name already exists.' });
+    }
+    next(err);
+  }
+}
+
+/**
+ * DELETE /api/auth/roles/:id
+ * Delete a custom role (blocked for system roles or roles currently in use)
+ */
+async function deleteRole(req, res, next) {
+  try {
+    const { id } = req.params;
+
+    const existingRes = await db.query('SELECT * FROM roles WHERE id = $1', [id]);
+    if (existingRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Role not found' });
+    }
+
+    const role = existingRes.rows[0];
+
+    if (role.is_system) {
+      return res.status(403).json({
+        success: false,
+        error: `System role "${role.name}" is built-in and cannot be deleted.`,
+      });
+    }
+
+    // Check if any users are currently assigned to this role
+    const inUseRes = await db.query(
+      'SELECT COUNT(*)::int as count FROM user_branch_roles WHERE role = $1',
+      [id]
+    );
+
+    if (inUseRes.rows[0].count > 0) {
+      return res.status(409).json({
+        success: false,
+        error: `Cannot delete role "${role.name}": ${inUseRes.rows[0].count} user assignment(s) are currently using this role. Reassign them first.`,
+      });
+    }
+
+    await db.query('DELETE FROM roles WHERE id = $1', [id]);
+
+    await recordAuditLog({
+      actorId: req.user.id,
+      branchId: req.branchId,
+      action: 'ROLE_DELETED',
+      entityType: 'roles',
+      entityId: null,
+      diffs: { deletedRole: role },
+      ipAddress: req.ip,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: `Custom role "${role.name}" deleted successfully.`,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   login,
   getCurrentUser,
@@ -637,5 +875,10 @@ module.exports = {
   listBranches,
   updateUser,
   deleteUser,
+  listRoles,
+  listPermissions,
+  createRole,
+  updateRole,
+  deleteRole,
 };
 

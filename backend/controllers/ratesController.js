@@ -148,6 +148,12 @@ async function setEntryRates(req, res, next) {
       },
     });
   } catch (err) {
+    if (err.code === '23505') {
+      return res.status(409).json({
+        success: false,
+        error: 'A conflict occurred while saving entry rates. Please refresh and retry.',
+      });
+    }
     next(err);
   }
 }

@@ -41,6 +41,24 @@ export function BranchProvider({ children }) {
 
   const activeBranch = branches.find((b) => b.branch_id === activeBranchId) || branches[0] || null;
   const currentRole = activeBranch ? activeBranch.role : null;
+  const currentRoleName = activeBranch ? (activeBranch.role_name || activeBranch.role) : null;
+  const permissions = Array.isArray(activeBranch?.permissions)
+    ? activeBranch.permissions
+    : typeof activeBranch?.permissions === 'string'
+    ? JSON.parse(activeBranch.permissions)
+    : currentRole === 'owner'
+    ? ['*']
+    : [];
+
+  const hasPermission = (permissionKey) => {
+    if (!currentRole) return false;
+    if (currentRole === 'owner') return true;
+    if (permissions.includes('*')) return true;
+    if (Array.isArray(permissionKey)) {
+      return permissionKey.some((p) => permissions.includes(p) || p === currentRole);
+    }
+    return permissions.includes(permissionKey) || permissionKey === currentRole;
+  };
 
   return (
     <BranchContext.Provider
@@ -48,6 +66,9 @@ export function BranchProvider({ children }) {
         activeBranchId,
         activeBranch,
         currentRole,
+        currentRoleName,
+        permissions,
+        hasPermission,
         availableBranches: branches,
         setActiveBranchId,
       }}
