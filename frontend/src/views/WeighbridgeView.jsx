@@ -600,6 +600,7 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
                         <input
                           type="text"
                           inputMode="numeric"
+                          pattern="[0-9]*"
                           maxLength={5}
                           placeholder="0"
                           value={line.boxes}
@@ -616,6 +617,7 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
                       <input
                         type="text"
                         inputMode="numeric"
+                        pattern="[0-9]*"
                         maxLength={3}
                         placeholder="%"
                         value={part.pct}
@@ -627,6 +629,7 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
                       <input
                         type="text"
                         inputMode="numeric"
+                        pattern="[0-9]*"
                         maxLength={5}
                         placeholder="0"
                         value={part.c}
@@ -948,6 +951,7 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
           </label>
           <input
             type="number"
+            inputMode="decimal"
             min="0"
             step="any"
             maxLength={10}
@@ -965,6 +969,7 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
           </label>
           <input
             type="number"
+            inputMode="decimal"
             min="0"
             step="any"
             maxLength={10}
@@ -982,6 +987,7 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
           </label>
           <input
             type="number"
+            inputMode="decimal"
             min="0"
             step="any"
             maxLength={10}

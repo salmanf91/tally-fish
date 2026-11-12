@@ -956,7 +956,8 @@ export default function MastersView() {
                     <div>
                       <label className="text-xs font-semibold text-slate-700 block mb-1">Contact Phone</label>
                       <input
-                        type="text"
+                        type="tel"
+                        inputMode="tel"
                         maxLength={25}
                         placeholder="e.g. +91 9876543210"
                         value={formData.phone}
@@ -1050,6 +1051,7 @@ export default function MastersView() {
                       <label className="text-xs font-semibold text-slate-700 block mb-1">Default Rate (₹/kg)</label>
                       <input
                         type="number"
+                        inputMode="decimal"
                         step="0.01"
                         min="0"
                         placeholder="35.00"

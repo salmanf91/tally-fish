@@ -112,8 +112,10 @@ export default function TodayView({ onNewEntry, onEditEntry, onViewLockedEntry }
   const lockedEntries = combinedDayEntries.filter((e) => e.status === 'LOCKED');
   const holdReviewEntries = combinedDayEntries.filter((e) => e.status === 'HOLD_REVIEW');
 
+  const isStaff = activeBranch?.role === 'staffAdmin';
+
   const filteredList = combinedDayEntries.filter((e) => {
-    if (filter === 'Rate') {
+    if (filter === 'Rate' || filter === 'Open') {
       return (
         e.status === 'RATE_PENDING' ||
         e.status === 'QUEUED_SYNC' ||
@@ -268,20 +270,20 @@ export default function TodayView({ onNewEntry, onEditEntry, onViewLockedEntry }
       {/* Filter Chips */}
       <div className="flex gap-1.5">
         {[
-          ['All', combinedDayEntries.length],
-          ['Rate', needRateEntries.length],
-          ['Done', lockedEntries.length],
-        ].map(([label, count]) => (
+          { key: 'All', label: 'All', count: combinedDayEntries.length },
+          { key: 'Rate', label: isStaff ? 'Open (Editable)' : 'Rate Pending', count: needRateEntries.length },
+          { key: 'Done', label: isStaff ? 'Locked by Admin' : 'Rate Set', count: lockedEntries.length },
+        ].map((tab) => (
           <button
-            key={label}
-            onClick={() => setFilter(label)}
+            key={tab.key}
+            onClick={() => setFilter(tab.key)}
             className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition-all ${
-              filter === label
+              filter === tab.key
                 ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
                 : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
             }`}
           >
-            {label} ({count})
+            {tab.label} ({tab.count})
           </button>
         ))}
       </div>
@@ -361,7 +363,7 @@ export default function TodayView({ onNewEntry, onEditEntry, onViewLockedEntry }
                     {isLocked ? (
                       <>
                         <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
-                          <Lock className="w-3 h-3 text-emerald-600" /> Rate Set
+                          <Lock className="w-3 h-3 text-emerald-600" /> {isStaff ? 'Locked by Admin' : 'Rate Set'}
                         </span>
                         <span className="text-[10px] text-slate-400 font-medium">🔒 Locked</span>
                       </>
@@ -382,9 +384,9 @@ export default function TodayView({ onNewEntry, onEditEntry, onViewLockedEntry }
                     ) : (
                       <>
                         <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200">
-                          <Clock className="w-3 h-3 text-amber-600" /> Rate Pending
+                          <Clock className="w-3 h-3 text-amber-600" /> {isStaff ? 'Open (Editable)' : 'Rate Pending'}
                         </span>
-                        <span className="text-[10px] text-slate-500 font-medium">Editable by staff</span>
+                        <span className="text-[10px] text-slate-500 font-medium">{isStaff ? 'Editable until locked' : 'Editable by staff'}</span>
                       </>
                     )}
                   </div>

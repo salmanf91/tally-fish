@@ -694,9 +694,31 @@ export default function StatementView({ onNavigateToRates, onNewEntry, onEditEnt
               font-weight: 600;
               color: #475569;
             }
+            @media print {
+              .no-print {
+                display: none !important;
+              }
+              body {
+                padding: 0 !important;
+              }
+            }
           </style>
         </head>
         <body>
+          <!-- Mobile & Desktop Top Bar with Back to App navigation (Hidden on print) -->
+          <div class="no-print" style="position: sticky; top: 0; left: 0; right: 0; background: #0f172a; color: white; padding: 12px 16px; margin: -16px -16px 16px -16px; display: flex; justify-content: space-between; align-items: center; z-index: 1000; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);">
+            <button onclick="if (window.opener) { window.close(); } else if (history.length > 1) { history.back(); } else { window.close(); }" style="background: #334155; color: white; border: 1px solid #475569; padding: 8px 16px; border-radius: 8px; font-weight: bold; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+              ← Back to App
+            </button>
+            <div style="display: flex; gap: 8px;">
+              <button onclick="window.print()" style="background: #f59e0b; color: #78350f; border: none; padding: 8px 16px; border-radius: 8px; font-weight: bold; font-size: 13px; cursor: pointer;">
+                🖨️ Print / Save PDF
+              </button>
+              <button onclick="window.close()" style="background: #475569; color: white; border: none; padding: 8px 14px; border-radius: 8px; font-weight: bold; font-size: 13px; cursor: pointer;">
+                ✕ Close
+              </button>
+            </div>
+          </div>
           <div class="header">
             <div>
               <h1 class="title">Indo Fish Meal &amp; Oil Co. Pvt. Ltd.</h1>

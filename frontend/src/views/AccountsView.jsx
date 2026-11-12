@@ -608,6 +608,7 @@ export default function AccountsView() {
                 <input
                   type="text"
                   inputMode="numeric"
+                  pattern="[0-9]*"
                   maxLength={4}
                   required={modalMode === 'add'}
                   value={formPin}
@@ -763,6 +764,7 @@ export default function AccountsView() {
                 <input
                   type="text"
                   inputMode="numeric"
+                  pattern="[0-9]*"
                   maxLength={4}
                   required
                   autoFocus
@@ -794,9 +796,4 @@ export default function AccountsView() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+   
