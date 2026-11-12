@@ -21,7 +21,7 @@ import {
   useCreateQuickFishType,
 } from '../hooks/useMasters';
 import { api } from '../services/api';
-import { saveOfflineEntry } from '../services/db';
+import { saveOfflineEntry, removeOfflineEntry } from '../services/db';
 import { registerBackgroundSync } from '../services/syncManager';
 
 const getLocalDateString = (d = new Date()) => {
@@ -129,6 +129,7 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
   const [step, setStep] = useState('fish');
 
   // Step 1 State: Fish & Remarks
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [entryDate, setEntryDate] = useState(() => {
     return editEntry?.entry_date ? editEntry.entry_date.split('T')[0] : getLocalDateString();
   });
@@ -466,6 +467,26 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
     }
   };
 
+  const handleDeleteEntry = async () => {
+    if (!editEntry) return;
+    try {
+      setSubmitting(true);
+      if (editEntry.id) {
+        await api.delete(`/entries/${editEntry.id}`);
+      } else if (editEntry.tempId) {
+        await removeOfflineEntry(editEntry.tempId);
+      }
+      await queryClient.invalidateQueries({ queryKey: ['entries'] });
+      setShowDeleteModal(false);
+      if (onCancel) onCancel();
+    } catch (err) {
+      setErrorMessage(err.message || 'Failed to delete weighbridge entry');
+      setShowDeleteModal(false);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   // --------------------------------------------------------------------------
   // STEP 1: FISH & REMARKS
   // --------------------------------------------------------------------------
@@ -492,9 +513,22 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
               <p className="text-xs text-slate-500">Step 1: Fish &amp; Remarks</p>
             </div>
           </div>
-          <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 border border-amber-200">
-            Step 1 of 2
-          </span>
+          <div className="flex items-center gap-2">
+            {editEntry && (
+              <button
+                type="button"
+                onClick={() => setShowDeleteModal(true)}
+                className="px-3 py-1.5 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 flex items-center gap-1.5 text-xs font-bold transition-colors"
+                title="Delete this intake slip"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                <span>Delete</span>
+              </button>
+            )}
+            <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 border border-amber-200">
+              Step 1 of 2
+            </span>
+          </div>
         </div>
 
         {/* Date Selector */}
@@ -1048,21 +1082,69 @@ export default function WeighbridgeView({ onEntryCreated, editEntry = null, onCa
       )}
 
       {/* Action Submit Button */}
-      <button
-        type="button"
-        onClick={handleSaveAndSend}
-        disabled={submitting || !weightsValid || !vehicleNo.trim() || !vehicleExists || !partyExists}
-        className="touch-key w-full py-4 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-40"
-      >
-        <CheckCircle2 className="w-4 h-4 stroke-[2.5]" />
-        {submitting
-          ? editEntry
-            ? 'Saving Changes...'
-            : 'Sending to Admin...'
-          : editEntry
-            ? 'Save Changes →'
-            : 'Send to admin for rate →'}
-      </button>
+      <div className="flex gap-2">
+        {editEntry && (
+          <button
+            type="button"
+            onClick={() => setShowDeleteModal(true)}
+            disabled={submitting}
+            className="py-4 px-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 hover:bg-rose-100 font-bold text-sm shadow-xs transition-all flex items-center justify-center gap-1.5 shrink-0"
+            title="Delete this intake slip"
+          >
+            <Trash2 className="w-4 h-4 text-rose-600" />
+            <span>Delete</span>
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={handleSaveAndSend}
+          disabled={submitting || !weightsValid || !vehicleNo.trim() || !vehicleExists || !partyExists}
+          className="touch-key flex-1 py-4 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-40"
+        >
+          <CheckCircle2 className="w-4 h-4 stroke-[2.5]" />
+          {submitting
+            ? editEntry
+              ? 'Saving Changes...'
+              : 'Sending to Admin...'
+            : editEntry
+              ? 'Save Changes →'
+              : 'Send to admin for rate →'}
+        </button>
+      </div>
+
+      {/* Delete Confirmation Dialog */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-5 max-w-sm w-full space-y-4 shadow-xl border border-slate-200">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 text-sm">Delete Slip #{editEntry.slip_no || editEntry.daily_sl_no}?</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Are you sure you want to delete this intake slip? This action cannot be undone.</p>
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setShowDeleteModal(false)}
+                className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 font-bold text-xs hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteEntry}
+                disabled={submitting}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-sm flex items-center gap-1.5"
+              >
+                {submitting ? 'Deleting...' : 'Yes, Delete Slip'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

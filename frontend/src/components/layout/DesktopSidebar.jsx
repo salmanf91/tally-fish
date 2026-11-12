@@ -102,7 +102,7 @@ export default function DesktopSidebar({ activeTab, onSelectTab, isOnline = true
       id: 'masters',
       label: 'Masters',
       icon: Users,
-      roles: ['billingAdmin'],
+      roles: ['billingAdmin', 'owner'],
     },
 
     // Global: Alerts

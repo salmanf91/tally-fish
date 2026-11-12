@@ -122,7 +122,7 @@ async function updateParty(req, res, next) {
         name = COALESCE($1, name),
         code = COALESCE($2, code),
         phone = COALESCE($3, phone),
-        branch_id = CASE WHEN $4 IS NOT NULL THEN $4 ELSE branch_id END,
+        branch_id = CASE WHEN $4::uuid IS NOT NULL THEN $4::uuid ELSE branch_id END,
         is_active = COALESCE($5, is_active),
         updated_at = CURRENT_TIMESTAMP
       WHERE id = $6
@@ -132,8 +132,8 @@ async function updateParty(req, res, next) {
         name ? name.trim() : null,
         code !== undefined ? (code ? code.trim() : null) : null,
         phone !== undefined ? (phone ? phone.trim() : null) : null,
-        branch_id,
-        is_active,
+        branch_id !== undefined ? branch_id : null,
+        is_active !== undefined ? is_active : null,
         id,
       ]
     );
@@ -373,9 +373,9 @@ async function updateVehicle(req, res, next) {
       UPDATE vehicles
       SET
         vehicle_no = COALESCE($1, vehicle_no),
-        party_id = CASE WHEN $2 IS NOT NULL THEN $2 ELSE party_id END,
+        party_id = CASE WHEN $2::uuid IS NOT NULL THEN $2::uuid ELSE party_id END,
         notes = COALESCE($3, notes),
-        branch_id = CASE WHEN $4 IS NOT NULL THEN $4 ELSE branch_id END,
+        branch_id = CASE WHEN $4::uuid IS NOT NULL THEN $4::uuid ELSE branch_id END,
         is_active = COALESCE($5, is_active),
         updated_at = CURRENT_TIMESTAMP
       WHERE id = $6
@@ -383,10 +383,10 @@ async function updateVehicle(req, res, next) {
       `,
       [
         vehicle_no ? vehicle_no.trim().toUpperCase() : null,
-        party_id,
-        notes,
-        branch_id,
-        is_active,
+        party_id !== undefined ? party_id : null,
+        notes !== undefined ? notes : null,
+        branch_id !== undefined ? branch_id : null,
+        is_active !== undefined ? is_active : null,
         id,
       ]
     );
@@ -545,16 +545,16 @@ async function createFishType(req, res, next) {
     }
 
     const effectiveBranchId =
-      req.currentRole === 'staffAdmin'
-        ? req.branchId
-        : branch_id !== undefined
+      branch_id !== undefined
         ? branch_id
-        : req.branchId;
+        : req.currentRole === 'staffAdmin'
+        ? req.branchId
+        : null;
 
     const result = await db.query(
       `
       INSERT INTO fish_types (id, branch_id, name, code, default_rate, is_active)
-      VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)
+      VALUES (gen_random_uuid(), $1::uuid, $2, $3, $4, $5)
       RETURNING *
       `,
       [
@@ -611,7 +611,7 @@ async function updateFishType(req, res, next) {
         name = COALESCE($1, name),
         code = COALESCE($2, code),
         default_rate = COALESCE($3, default_rate),
-        branch_id = CASE WHEN $4 IS NOT NULL THEN $4 ELSE branch_id END,
+        branch_id = CASE WHEN $4::uuid IS NOT NULL THEN $4::uuid ELSE branch_id END,
         is_active = COALESCE($5, is_active),
         updated_at = CURRENT_TIMESTAMP
       WHERE id = $6
@@ -620,9 +620,9 @@ async function updateFishType(req, res, next) {
       [
         name ? name.trim().toUpperCase() : null,
         code !== undefined ? (code ? code.trim() : null) : null,
-        default_rate,
-        branch_id,
-        is_active,
+        default_rate !== undefined ? default_rate : null,
+        branch_id !== undefined ? branch_id : null,
+        is_active !== undefined ? is_active : null,
         id,
       ]
     );

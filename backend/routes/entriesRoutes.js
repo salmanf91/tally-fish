@@ -46,6 +46,13 @@ router.put(
   entriesController.updateEntry
 );
 
+// Delete entry: staffAdmin (before rate lock only), billingAdmin, owner (anytime)
+router.delete(
+  '/:id',
+  requireBranchRole(['staffAdmin', 'billingAdmin', 'owner']),
+  entriesController.deleteEntry
+);
+
 // =============================================================================
 // RATES (/api/entries/:id/rates)
 // =============================================================================

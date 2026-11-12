@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   FileSpreadsheet,
   RefreshCw,
@@ -18,6 +18,7 @@ import {
   BadgeDollarSign,
   Clock,
   CheckCircle2,
+  Trash2,
 } from 'lucide-react';
 import { useBranch } from '../context/BranchContext';
 import { useAuth } from '../context/AuthContext';
@@ -140,9 +141,30 @@ export function getEntryLots(entry) {
 export default function StatementView({ onNavigateToRates, onNewEntry, onEditEntry }) {
   const { activeBranchId, activeBranch, availableBranches, setActiveBranchId } = useBranch();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
 
   const isBilling = activeBranch?.role === 'billingAdmin';
   const isOwner = activeBranch?.role === 'owner';
+
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      setIsDeleting(true);
+      await api.delete(`/entries/${deleteTarget.id}`);
+      await queryClient.invalidateQueries({ queryKey: ['entries'] });
+      setDeleteTarget(null);
+      setToastMessage(`Slip #${deleteTarget.slip_no || deleteTarget.daily_sl_no} deleted successfully.`);
+      setTimeout(() => setToastMessage(''), 3000);
+    } catch (err) {
+      alert(err.message || 'Failed to delete entry');
+      setDeleteTarget(null);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const getLocalDateString = (d = new Date()) => {
     const year = d.getFullYear();
@@ -1121,17 +1143,33 @@ export default function StatementView({ onNavigateToRates, onNewEntry, onEditEnt
                       <span className="text-slate-500 font-mono text-[11px] block">
                         {e.vehicle_no || 'Weights pending'}
                       </span>
-                      {onEditEntry && (
-                        <button
-                          type="button"
-                          onClick={() => onEditEntry(e)}
-                          className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-amber-800 transition-colors mt-0.5"
-                          title="Edit intake slip details (boxes, weights, vehicle)"
-                        >
-                          <Edit3 className="w-2.5 h-2.5" />
-                          <span>Edit entry</span>
-                        </button>
-                      )}
+                      <div className="flex items-center gap-2 mt-0.5">
+                        {onEditEntry && (
+                          <button
+                            type="button"
+                            onClick={() => onEditEntry(e)}
+                            className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-amber-800 transition-colors"
+                            title="Edit intake slip details (boxes, weights, vehicle)"
+                          >
+                            <Edit3 className="w-2.5 h-2.5" />
+                            <span>Edit</span>
+                          </button>
+                        )}
+                        {(isOwner || isBilling) && (
+                          <button
+                            type="button"
+                            onClick={(ev) => {
+                              ev.stopPropagation();
+                              setDeleteTarget(e);
+                            }}
+                            className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-rose-700 transition-colors"
+                            title="Delete this intake slip"
+                          >
+                            <Trash2 className="w-2.5 h-2.5" />
+                            <span>Delete</span>
+                          </button>
+                        )}
+                      </div>
                     </td>
                     <td className="py-3 px-3 text-right font-mono font-bold text-slate-800">
                       {Number(e.net_kg).toLocaleString()}
@@ -1342,6 +1380,40 @@ export default function StatementView({ onNavigateToRates, onNewEntry, onEditEnt
                 className="py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md flex items-center justify-center gap-1.5 transition-all"
               >
                 <Send className="w-4 h-4" /> Open WhatsApp
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-5 max-w-sm w-full space-y-4 shadow-xl border border-slate-200">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 text-sm">Delete Slip #{deleteTarget.slip_no || deleteTarget.daily_sl_no}?</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Are you sure you want to delete this procurement slip for {deleteTarget.party_name}? This will remove the recorded weight and box lot.</p>
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 font-bold text-xs hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={isDeleting}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-sm flex items-center gap-1.5"
+              >
+                {isDeleting ? 'Deleting...' : 'Yes, Delete Slip'}
               </button>
             </div>
           </div>

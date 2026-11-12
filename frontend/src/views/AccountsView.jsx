@@ -796,4 +796,9 @@ export default function AccountsView() {
                 </button>
               </div>
             </form>
-   
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
