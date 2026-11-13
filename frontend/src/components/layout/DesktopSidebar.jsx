@@ -64,13 +64,13 @@ export default function DesktopSidebar({ activeTab, onSelectTab, isOnline = true
 
   // Navigation Items tailored per role matching the workflow prototype
   const navItems = [
-    // Staff Admin / Operator: Today
+    // Staff Admin / Owner: Today
     {
       id: 'today',
-      label: 'Today',
+      label: "Today's Intake",
       icon: Clock,
       permission: 'slips:view',
-      roles: ['staffAdmin'],
+      roles: ['owner', 'staffAdmin'],
     },
     {
       id: 'new',

@@ -118,7 +118,7 @@ export default function MobileTouchHeader({ isOnline = true, onSelectTab }) {
                 TALLY FISH
               </h1>
               <span className="text-[10px] text-amber-600 font-bold tracking-wide">
-                {activeBranch?.role === 'owner' ? 'OWNER PORTAL' : 'PROCUREMENT'}
+                PROCUREMENT
               </span>
             </div>
           </div>

@@ -17,9 +17,10 @@ export default function MobileTouchNav({ activeTab, onSelectTab }) {
 
   if (currentRole === 'owner') {
     tabs = [
+      { id: 'today', label: 'Today', icon: Clock },
       { id: 'statement', label: 'Statement', icon: FileSpreadsheet },
-      { id: 'rates', label: 'Set rate', icon: IndianRupee },
       { id: 'new', label: 'New entry', icon: PlusCircle },
+      { id: 'rates', label: 'Set rate', icon: IndianRupee },
       { id: 'accounts', label: 'Accounts', icon: UserCheck },
     ];
   } else if (currentRole === 'billingAdmin') {
@@ -44,7 +45,6 @@ export default function MobileTouchNav({ activeTab, onSelectTab }) {
         visible:
           hasPermission &&
           hasPermission('slips:view') &&
-          !hasPermission('statement:view') &&
           !hasPermission('billing:view'),
       },
       {
