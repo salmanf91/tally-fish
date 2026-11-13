@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { BadgeDollarSign, ChevronLeft, ChevronRight, CheckCircle2, Edit3, RefreshCw, Plus, Trash2 } from 'lucide-react';
+import { IndianRupee, ChevronLeft, ChevronRight, CheckCircle2, Edit3, RefreshCw, Plus, Trash2 } from 'lucide-react';
 import { useBranch } from '../context/BranchContext';
 import { api } from '../services/api';
 
@@ -273,7 +273,7 @@ export default function BillingView({ onEditRates, onNewEntry, onEditEntry }) {
                     onClick={() => onEditRates(entry.id)}
                     className="flex-1 min-w-[95px] py-2 px-2.5 rounded-xl bg-white border border-amber-300 text-amber-900 font-bold text-xs hover:bg-amber-50 flex items-center justify-center gap-1.5 shadow-2xs transition-colors"
                   >
-                    <BadgeDollarSign className="w-3.5 h-3.5 text-amber-600" />
+                    <IndianRupee className="w-3.5 h-3.5 text-amber-600" />
                     <span>Edit Rates</span>
                   </button>
                   <button

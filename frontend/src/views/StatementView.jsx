@@ -15,7 +15,7 @@ import {
   Check,
   Edit3,
   Plus,
-  BadgeDollarSign,
+  IndianRupee,
   Clock,
   CheckCircle2,
   Trash2,
@@ -1230,7 +1230,7 @@ export default function StatementView({ onNavigateToRates, onNewEntry, onEditEnt
                               }}
                               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all active:scale-95"
                             >
-                              <BadgeDollarSign className="w-3.5 h-3.5" />
+                              <IndianRupee className="w-3.5 h-3.5" />
                               <span>Set Rate</span>
                             </button>
                           ) : (

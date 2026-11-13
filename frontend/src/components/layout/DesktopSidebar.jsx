@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   Scale,
   FileSpreadsheet,
-  BadgeDollarSign,
+  IndianRupee,
   Users,
   Bell,
   LogOut,
@@ -91,7 +91,7 @@ export default function DesktopSidebar({ activeTab, onSelectTab, isOnline = true
     {
       id: 'rates',
       label: 'Set rate',
-      icon: BadgeDollarSign,
+      icon: IndianRupee,
       permission: 'rates:set',
       roles: ['owner'],
       badge: pendingRatesCount > 0 ? `${pendingRatesCount} pending` : null,

@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   FileSpreadsheet,
-  BadgeDollarSign,
+  IndianRupee,
   Users,
   PlusCircle,
   Clock,
@@ -18,7 +18,7 @@ export default function MobileTouchNav({ activeTab, onSelectTab }) {
   if (currentRole === 'owner') {
     tabs = [
       { id: 'statement', label: 'Statement', icon: FileSpreadsheet },
-      { id: 'rates', label: 'Set rate', icon: BadgeDollarSign },
+      { id: 'rates', label: 'Set rate', icon: IndianRupee },
       { id: 'new', label: 'New entry', icon: PlusCircle },
       { id: 'accounts', label: 'Accounts', icon: UserCheck },
     ];
@@ -62,7 +62,7 @@ export default function MobileTouchNav({ activeTab, onSelectTab }) {
       {
         id: 'rates',
         label: 'Set rate',
-        icon: BadgeDollarSign,
+        icon: IndianRupee,
         visible: hasPermission && hasPermission('rates:set'),
       },
       {

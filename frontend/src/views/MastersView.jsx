@@ -611,7 +611,8 @@ export default function MastersView() {
                 <p className="text-xs text-slate-400">Click &ldquo;+ Add Vendor&rdquo; or &ldquo;Import CSV&rdquo; to populate master records.</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <>
+                <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-bold uppercase tracking-wider text-slate-500">
@@ -778,12 +779,13 @@ export default function MastersView() {
                     })}
                   </tbody>
                 </table>
-                <div className="p-3 bg-slate-50 border-t border-slate-200 text-xs text-slate-500 flex items-center justify-between">
-                  <span>Total Vendors: <strong>{filteredParties.length}</strong></span>
-                  <span className="text-[11px] text-slate-400">Verified procurement parties &amp; boat vendors</span>
-                </div>
               </div>
-            )}
+              <div className="p-3 bg-slate-50 border-t border-slate-200 text-xs text-slate-500 flex items-center justify-between">
+                <span>Total Vendors: <strong>{filteredParties.length}</strong></span>
+                <span className="text-[11px] text-slate-400">Verified procurement parties &amp; boat vendors</span>
+              </div>
+            </>
+          )}
           </>
         )}
 
@@ -797,7 +799,8 @@ export default function MastersView() {
                 <p className="text-xs text-slate-400">Click &ldquo;+ Add Vehicle&rdquo; or &ldquo;Import CSV&rdquo; to register transport vehicles.</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <>
+                <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-bold uppercase tracking-wider text-slate-500">
@@ -957,12 +960,13 @@ export default function MastersView() {
                     ))}
                   </tbody>
                 </table>
-                <div className="p-3 bg-slate-50 border-t border-slate-200 text-xs text-slate-500 flex items-center justify-between">
-                  <span>Total Registered Vehicles: <strong>{filteredVehicles.length}</strong></span>
-                  <span className="text-[11px] text-slate-400">Transport and delivery trucks</span>
-                </div>
               </div>
-            )}
+              <div className="p-3 bg-slate-50 border-t border-slate-200 text-xs text-slate-500 flex items-center justify-between">
+                <span>Total Registered Vehicles: <strong>{filteredVehicles.length}</strong></span>
+                <span className="text-[11px] text-slate-400">Transport and delivery trucks</span>
+              </div>
+            </>
+          )}
           </>
         )}
 
@@ -976,7 +980,8 @@ export default function MastersView() {
                 <p className="text-xs text-slate-400">Click &ldquo;+ Add Species&rdquo; or &ldquo;Import CSV&rdquo; to populate the fish catalog.</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <>
+                <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-bold uppercase tracking-wider text-slate-500">
@@ -1141,12 +1146,13 @@ export default function MastersView() {
                     })}
                   </tbody>
                 </table>
-                <div className="p-3 bg-slate-50 border-t border-slate-200 text-xs text-slate-500 flex items-center justify-between">
-                  <span>Total Fish Species: <strong>{filteredFishTypes.length}</strong></span>
-                  <span className="text-[11px] text-slate-400">Standard factory species catalog &amp; pricing benchmarks</span>
-                </div>
               </div>
-            )}
+              <div className="p-3 bg-slate-50 border-t border-slate-200 text-xs text-slate-500 flex items-center justify-between">
+                <span>Total Fish Species: <strong>{filteredFishTypes.length}</strong></span>
+                <span className="text-[11px] text-slate-400">Standard factory species catalog &amp; pricing benchmarks</span>
+              </div>
+            </>
+          )}
           </>
         )}
       </div>
