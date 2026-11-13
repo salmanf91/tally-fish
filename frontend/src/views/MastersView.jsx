@@ -16,6 +16,7 @@ import {
   RefreshCw,
   Power,
   FileSpreadsheet,
+  ChevronDown,
 } from 'lucide-react';
 import { useBranch } from '../context/BranchContext';
 import { useAuth } from '../context/AuthContext';
@@ -92,6 +93,7 @@ export default function MastersView() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'active' | 'inactive'
   const [alertBanner, setAlertBanner] = useState(null);
+  const [expandedRowId, setExpandedRowId] = useState(null);
 
   // Queries
   const { data: parties = [], isLoading: partiesLoading, refetch: refetchParties } = useParties(activeBranchId);
@@ -527,6 +529,7 @@ export default function MastersView() {
             onClick={() => {
               setActiveTab('parties');
               setSearchTerm('');
+              setExpandedRowId(null);
             }}
             className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
               activeTab === 'parties'
@@ -542,6 +545,7 @@ export default function MastersView() {
             onClick={() => {
               setActiveTab('vehicles');
               setSearchTerm('');
+              setExpandedRowId(null);
             }}
             className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
               activeTab === 'vehicles'
@@ -557,6 +561,7 @@ export default function MastersView() {
             onClick={() => {
               setActiveTab('fish');
               setSearchTerm('');
+              setExpandedRowId(null);
             }}
             className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
               activeTab === 'fish'
@@ -606,7 +611,8 @@ export default function MastersView() {
                 <p className="text-xs text-slate-400">Click &ldquo;+ Add Vendor&rdquo; or &ldquo;Import CSV&rdquo; to populate master records.</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <>
+                <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-bold uppercase tracking-wider text-slate-500">
@@ -619,84 +625,167 @@ export default function MastersView() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {filteredParties.map((p, idx) => (
-                      <tr key={p.id} className="hover:bg-amber-50/40 transition-colors">
-                        <td className="py-3 px-4 text-center font-mono text-slate-400 font-semibold">
-                          {idx + 1}
-                        </td>
-                        <td className="py-3 px-4">
-                          <span className="font-bold text-slate-900 text-xs">{p.name}</span>
-                        </td>
-                        <td className="py-3 px-4 font-mono font-semibold text-slate-700">
-                          {p.code ? (
-                            <span className="px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-[11px]">
-                              {p.code}
-                            </span>
-                          ) : (
-                            <span className="text-slate-400">—</span>
+                    {filteredParties.map((p, idx) => {
+                      const isExpanded = expandedRowId === p.id;
+                      return (
+                        <React.Fragment key={p.id}>
+                          <tr className="hover:bg-amber-50/40 transition-colors">
+                            <td className="py-3 px-4 text-center font-mono text-slate-400 font-semibold">
+                              {idx + 1}
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-1.5 whitespace-nowrap">
+                                <span className="font-bold text-slate-900 text-xs">{p.name}</span>
+                                {canCurate && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setExpandedRowId(isExpanded ? null : p.id)}
+                                    className="sm:hidden px-1.5 py-0.5 rounded-md bg-slate-100 hover:bg-amber-100 text-slate-600 hover:text-amber-700 border border-slate-200 transition-colors inline-flex items-center gap-0.5 text-[10px] font-bold"
+                                    title="Actions"
+                                  >
+                                    <span>Actions</span>
+                                    <ChevronDown
+                                      className={`w-3 h-3 transition-transform duration-200 ${
+                                        isExpanded ? 'rotate-180 text-amber-600' : ''
+                                      }`}
+                                    />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-3 px-4 font-mono font-semibold text-slate-700">
+                              {p.code ? (
+                                <span className="px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-[11px]">
+                                  {p.code}
+                                </span>
+                              ) : (
+                                <span className="text-slate-400">—</span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 font-mono text-slate-600">
+                              {p.phone || <span className="text-slate-400">—</span>}
+                            </td>
+                            <td className="py-3 px-4">
+                              <span
+                                className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2 py-0.5 rounded-full border ${
+                                  p.is_active
+                                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                    : 'bg-slate-100 text-slate-500 border-slate-200'
+                                }`}
+                              >
+                                <span className={`w-1.5 h-1.5 rounded-full ${p.is_active ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+                                {p.is_active ? 'Active' : 'Inactive'}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                {canCurate && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleToggleActive(p)}
+                                      title={p.is_active ? 'Deactivate vendor' : 'Activate vendor'}
+                                      className={`p-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1 transition-colors ${
+                                        p.is_active
+                                          ? 'border-slate-200 text-slate-500 hover:text-amber-800 hover:bg-amber-50'
+                                          : 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'
+                                      }`}
+                                    >
+                                      <Power className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenEdit(p)}
+                                      title="Edit Vendor"
+                                      className="p-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700"
+                                    >
+                                      <Edit2 className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setDeleteConfirmItem(p)}
+                                      title="Delete Vendor"
+                                      className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+
+                          {/* Mobile Collapsible Actions Drawer */}
+                          {isExpanded && canCurate && (
+                            <tr className="bg-amber-50/70 border-b border-amber-200 sm:hidden">
+                              <td colSpan={6} className="p-3">
+                                <div className="space-y-2">
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="font-bold text-slate-800">
+                                      Vendor: {p.name} {p.code ? `(${p.code})` : ''}
+                                    </span>
+                                    <span
+                                      className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                        p.is_active
+                                          ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                          : 'bg-slate-100 text-slate-500 border-slate-200'
+                                      }`}
+                                    >
+                                      <span className={`w-1.5 h-1.5 rounded-full ${p.is_active ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+                                      {p.is_active ? 'Active' : 'Inactive'}
+                                    </span>
+                                  </div>
+                                  {p.phone && (
+                                    <p className="text-[11px] text-slate-600 bg-white/70 p-2 rounded-lg border border-amber-100 font-mono">
+                                      Phone: {p.phone}
+                                    </p>
+                                  )}
+                                  <div className="grid grid-cols-3 gap-2 pt-1 border-t border-amber-200/60">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleToggleActive(p)}
+                                      className={`py-2 px-2 rounded-xl text-xs font-bold border flex items-center justify-center gap-1.5 shadow-2xs ${
+                                        p.is_active
+                                          ? 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                                          : 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700'
+                                      }`}
+                                    >
+                                      <Power className="w-3.5 h-3.5" />
+                                      <span>{p.is_active ? 'Disable' : 'Enable'}</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenEdit(p)}
+                                      className="py-2 px-2 rounded-xl bg-white border border-slate-200 text-slate-800 font-bold text-xs flex items-center justify-center gap-1.5 hover:bg-slate-50 shadow-2xs"
+                                    >
+                                      <Edit2 className="w-3.5 h-3.5 text-amber-600" />
+                                      <span>Edit</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setDeleteConfirmItem(p)}
+                                      className="py-2 px-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 font-bold text-xs flex items-center justify-center gap-1.5 hover:bg-rose-100 shadow-2xs"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                                      <span>Delete</span>
+                                    </button>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
                           )}
-                        </td>
-                        <td className="py-3 px-4 font-mono text-slate-600">
-                          {p.phone || <span className="text-slate-400">—</span>}
-                        </td>
-                        <td className="py-3 px-4">
-                          <span
-                            className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2 py-0.5 rounded-full border ${
-                              p.is_active
-                                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                                : 'bg-slate-100 text-slate-500 border-slate-200'
-                            }`}
-                          >
-                            <span className={`w-1.5 h-1.5 rounded-full ${p.is_active ? 'bg-emerald-500' : 'bg-slate-400'}`} />
-                            {p.is_active ? 'Active' : 'Inactive'}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            {canCurate && (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={() => handleToggleActive(p)}
-                                  title={p.is_active ? 'Deactivate vendor' : 'Activate vendor'}
-                                  className={`p-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1 transition-colors ${
-                                    p.is_active
-                                      ? 'border-slate-200 text-slate-500 hover:text-amber-800 hover:bg-amber-50'
-                                      : 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'
-                                  }`}
-                                >
-                                  <Power className="w-3.5 h-3.5" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenEdit(p)}
-                                  title="Edit Vendor"
-                                  className="p-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700"
-                                >
-                                  <Edit2 className="w-3.5 h-3.5" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setDeleteConfirmItem(p)}
-                                  title="Delete Vendor"
-                                  className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                        </React.Fragment>
+                      );
+                    })}
                   </tbody>
                 </table>
-                <div className="p-3 bg-slate-50 border-t border-slate-200 text-xs text-slate-500 flex items-center justify-between">
-                  <span>Total Vendors: <strong>{filteredParties.length}</strong></span>
-                  <span className="text-[11px] text-slate-400">Verified procurement parties &amp; boat vendors</span>
-                </div>
               </div>
-            )}
+              <div className="p-3 bg-slate-50 border-t border-slate-200 text-xs text-slate-500 flex items-center justify-between">
+                <span>Total Vendors: <strong>{filteredParties.length}</strong></span>
+                <span className="text-[11px] text-slate-400">Verified procurement parties &amp; boat vendors</span>
+              </div>
+            </>
+          )}
           </>
         )}
 
@@ -710,12 +799,13 @@ export default function MastersView() {
                 <p className="text-xs text-slate-400">Click &ldquo;+ Add Vehicle&rdquo; or &ldquo;Import CSV&rdquo; to register transport vehicles.</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <>
+                <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-bold uppercase tracking-wider text-slate-500">
                       <th className="py-3 px-4 w-12 text-center">#</th>
-                      <th className="py-3 px-4">Vehicle Registration No</th>
+                      <th className="py-3 px-4 whitespace-nowrap">Vehicle No</th>
                       <th className="py-3 px-4">Associated Vendor / Owner</th>
                       <th className="py-3 px-4">Tare / Notes</th>
                       <th className="py-3 px-4 w-28">Status</th>
@@ -724,79 +814,159 @@ export default function MastersView() {
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {filteredVehicles.map((v, idx) => (
-                      <tr key={v.id} className="hover:bg-blue-50/40 transition-colors">
-                        <td className="py-3 px-4 text-center font-mono text-slate-400 font-semibold">
-                          {idx + 1}
-                        </td>
-                        <td className="py-3 px-4 font-mono font-bold text-blue-900 text-xs">
-                          <span className="px-2 py-1 rounded-md bg-blue-50 border border-blue-200 tracking-wider">
-                            {v.vehicle_no}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 font-medium text-slate-800">
-                          {v.party_name || <span className="text-slate-400 italic">Generic / Freelance</span>}
-                        </td>
-                        <td className="py-3 px-4 text-slate-600">
-                          {v.notes ? <span className="text-[11px] text-slate-500 font-mono">{v.notes}</span> : <span className="text-slate-400">—</span>}
-                        </td>
-                        <td className="py-3 px-4">
-                          <span
-                            className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2 py-0.5 rounded-full border ${
-                              v.is_active
-                                ? 'bg-blue-50 text-blue-800 border-blue-200'
-                                : 'bg-slate-100 text-slate-500 border-slate-200'
-                            }`}
-                          >
-                            <span className={`w-1.5 h-1.5 rounded-full ${v.is_active ? 'bg-blue-500' : 'bg-slate-400'}`} />
-                            {v.is_active ? 'Active' : 'Inactive'}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            {canCurate && (
-                              <>
+                      <React.Fragment key={v.id}>
+                        <tr className="hover:bg-blue-50/40 transition-colors">
+                          <td className="py-3 px-4 text-center font-mono text-slate-400 font-semibold">
+                            {idx + 1}
+                          </td>
+                          <td className="py-3 px-4 font-mono font-bold text-blue-900 text-xs whitespace-nowrap">
+                            <div className="flex items-center gap-1.5 whitespace-nowrap">
+                              <span className="inline-block whitespace-nowrap px-2 py-1 rounded-md bg-blue-50 border border-blue-200 tracking-wider">
+                                {v.vehicle_no}
+                              </span>
+                              {canCurate && (
                                 <button
                                   type="button"
-                                  onClick={() => handleToggleActive(v)}
-                                  title={v.is_active ? 'Deactivate vehicle' : 'Activate vehicle'}
-                                  className={`p-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1 transition-colors ${
-                                    v.is_active
-                                      ? 'border-slate-200 text-slate-500 hover:text-blue-800 hover:bg-blue-50'
-                                      : 'border-blue-200 text-blue-700 hover:bg-blue-50'
-                                  }`}
+                                  onClick={() => setExpandedRowId(expandedRowId === v.id ? null : v.id)}
+                                  className="sm:hidden px-1.5 py-0.5 rounded-md bg-slate-100 hover:bg-blue-100 text-slate-600 hover:text-blue-700 border border-slate-200 transition-colors inline-flex items-center gap-0.5 text-[10px] font-bold"
+                                  title="Actions"
                                 >
-                                  <Power className="w-3.5 h-3.5" />
+                                  <span>Actions</span>
+                                  <ChevronDown
+                                    className={`w-3 h-3 transition-transform duration-200 ${
+                                      expandedRowId === v.id ? 'rotate-180 text-blue-600' : ''
+                                    }`}
+                                  />
                                 </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenEdit(v)}
-                                  title="Edit Vehicle"
-                                  className="p-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700"
-                                >
-                                  <Edit2 className="w-3.5 h-3.5" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setDeleteConfirmItem(v)}
-                                  title="Delete Vehicle"
-                                  className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-3 px-4 font-medium text-slate-800">
+                            {v.party_name || <span className="text-slate-400 italic">Generic / Freelance</span>}
+                          </td>
+                          <td className="py-3 px-4 text-slate-600">
+                            {v.notes ? <span className="text-[11px] text-slate-500 font-mono">{v.notes}</span> : <span className="text-slate-400">—</span>}
+                          </td>
+                          <td className="py-3 px-4">
+                            <span
+                              className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2 py-0.5 rounded-full border ${
+                                v.is_active
+                                  ? 'bg-blue-50 text-blue-800 border-blue-200'
+                                  : 'bg-slate-100 text-slate-500 border-slate-200'
+                              }`}
+                            >
+                              <span className={`w-1.5 h-1.5 rounded-full ${v.is_active ? 'bg-blue-500' : 'bg-slate-400'}`} />
+                              {v.is_active ? 'Active' : 'Inactive'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              {canCurate && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleActive(v)}
+                                    title={v.is_active ? 'Deactivate vehicle' : 'Activate vehicle'}
+                                    className={`p-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1 transition-colors ${
+                                      v.is_active
+                                        ? 'border-slate-200 text-slate-500 hover:text-blue-800 hover:bg-blue-50'
+                                        : 'border-blue-200 text-blue-700 hover:bg-blue-50'
+                                    }`}
+                                  >
+                                    <Power className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenEdit(v)}
+                                    title="Edit Vehicle"
+                                    className="p-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700"
+                                  >
+                                    <Edit2 className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setDeleteConfirmItem(v)}
+                                    title="Delete Vehicle"
+                                    className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+
+                        {/* Mobile Collapsible Actions Drawer */}
+                        {expandedRowId === v.id && canCurate && (
+                          <tr className="bg-blue-50/70 border-b border-blue-200 sm:hidden">
+                            <td colSpan={6} className="p-3">
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between text-xs">
+                                  <span className="font-bold text-slate-800">
+                                    Vehicle: {v.vehicle_no}
+                                  </span>
+                                  <span
+                                    className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                      v.is_active
+                                        ? 'bg-blue-100 text-blue-800 border-blue-300'
+                                        : 'bg-slate-100 text-slate-500 border-slate-200'
+                                    }`}
+                                  >
+                                    <span className={`w-1.5 h-1.5 rounded-full ${v.is_active ? 'bg-blue-500' : 'bg-slate-400'}`} />
+                                    {v.is_active ? 'Active' : 'Inactive'}
+                                  </span>
+                                </div>
+                                {v.notes && (
+                                  <p className="text-[11px] text-slate-600 bg-white/70 p-2 rounded-lg border border-blue-100 font-mono">
+                                    {v.notes}
+                                  </p>
+                                )}
+                                <div className="grid grid-cols-3 gap-2 pt-1 border-t border-blue-200/60">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleActive(v)}
+                                    className={`py-2 px-2 rounded-xl text-xs font-bold border flex items-center justify-center gap-1.5 shadow-2xs ${
+                                      v.is_active
+                                        ? 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                                        : 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700'
+                                    }`}
+                                  >
+                                    <Power className="w-3.5 h-3.5" />
+                                    <span>{v.is_active ? 'Disable' : 'Enable'}</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenEdit(v)}
+                                    className="py-2 px-2 rounded-xl bg-white border border-slate-200 text-slate-800 font-bold text-xs flex items-center justify-center gap-1.5 hover:bg-slate-50 shadow-2xs"
+                                  >
+                                    <Edit2 className="w-3.5 h-3.5 text-blue-600" />
+                                    <span>Edit</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setDeleteConfirmItem(v)}
+                                    className="py-2 px-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 font-bold text-xs flex items-center justify-center gap-1.5 hover:bg-rose-100 shadow-2xs"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                                    <span>Delete</span>
+                                  </button>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
                     ))}
                   </tbody>
                 </table>
-                <div className="p-3 bg-slate-50 border-t border-slate-200 text-xs text-slate-500 flex items-center justify-between">
-                  <span>Total Registered Vehicles: <strong>{filteredVehicles.length}</strong></span>
-                  <span className="text-[11px] text-slate-400">Transport and delivery trucks</span>
-                </div>
               </div>
-            )}
+              <div className="p-3 bg-slate-50 border-t border-slate-200 text-xs text-slate-500 flex items-center justify-between">
+                <span>Total Registered Vehicles: <strong>{filteredVehicles.length}</strong></span>
+                <span className="text-[11px] text-slate-400">Transport and delivery trucks</span>
+              </div>
+            </>
+          )}
           </>
         )}
 
@@ -810,7 +980,8 @@ export default function MastersView() {
                 <p className="text-xs text-slate-400">Click &ldquo;+ Add Species&rdquo; or &ldquo;Import CSV&rdquo; to populate the fish catalog.</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <>
+                <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-bold uppercase tracking-wider text-slate-500">
@@ -823,84 +994,165 @@ export default function MastersView() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {filteredFishTypes.map((f, idx) => (
-                      <tr key={f.id} className="hover:bg-emerald-50/40 transition-colors">
-                        <td className="py-3 px-4 text-center font-mono text-slate-400 font-semibold">
-                          {idx + 1}
-                        </td>
-                        <td className="py-3 px-4 font-bold text-emerald-950 text-xs">
-                          {f.name}
-                        </td>
-                        <td className="py-3 px-4 font-mono font-semibold text-slate-700">
-                          {f.code ? (
-                            <span className="px-2 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px]">
-                              {f.code}
-                            </span>
-                          ) : (
-                            <span className="text-slate-400">—</span>
+                    {filteredFishTypes.map((f, idx) => {
+                      const isExpanded = expandedRowId === f.id;
+                      return (
+                        <React.Fragment key={f.id}>
+                          <tr className="hover:bg-emerald-50/40 transition-colors">
+                            <td className="py-3 px-4 text-center font-mono text-slate-400 font-semibold">
+                              {idx + 1}
+                            </td>
+                            <td className="py-3 px-4 font-bold text-emerald-950 text-xs whitespace-nowrap">
+                              <div className="flex items-center gap-1.5 whitespace-nowrap">
+                                <span>{f.name}</span>
+                                {canCurate && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setExpandedRowId(isExpanded ? null : f.id)}
+                                    className="sm:hidden px-1.5 py-0.5 rounded-md bg-slate-100 hover:bg-emerald-100 text-slate-600 hover:text-emerald-700 border border-slate-200 transition-colors inline-flex items-center gap-0.5 text-[10px] font-bold"
+                                    title="Actions"
+                                  >
+                                    <span>Actions</span>
+                                    <ChevronDown
+                                      className={`w-3 h-3 transition-transform duration-200 ${
+                                        isExpanded ? 'rotate-180 text-emerald-600' : ''
+                                      }`}
+                                    />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-3 px-4 font-mono font-semibold text-slate-700">
+                              {f.code ? (
+                                <span className="px-2 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px]">
+                                  {f.code}
+                                </span>
+                              ) : (
+                                <span className="text-slate-400">—</span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 font-mono font-bold text-emerald-700">
+                              ₹{parseFloat(f.default_rate || 0).toFixed(2)} / kg
+                            </td>
+                            <td className="py-3 px-4">
+                              <span
+                                className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2 py-0.5 rounded-full border ${
+                                  f.is_active
+                                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                    : 'bg-slate-100 text-slate-500 border-slate-200'
+                                }`}
+                              >
+                                <span className={`w-1.5 h-1.5 rounded-full ${f.is_active ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+                                {f.is_active ? 'Active' : 'Inactive'}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                {canCurate && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleToggleActive(f)}
+                                      title={f.is_active ? 'Deactivate species' : 'Activate species'}
+                                      className={`p-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1 transition-colors ${
+                                        f.is_active
+                                          ? 'border-slate-200 text-slate-500 hover:text-emerald-800 hover:bg-emerald-50'
+                                          : 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'
+                                      }`}
+                                    >
+                                      <Power className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenEdit(f)}
+                                      title="Edit Species"
+                                      className="p-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700"
+                                    >
+                                      <Edit2 className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setDeleteConfirmItem(f)}
+                                      title="Delete Species"
+                                      className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+
+                          {/* Mobile Collapsible Actions Drawer */}
+                          {isExpanded && canCurate && (
+                            <tr className="bg-emerald-50/70 border-b border-emerald-200 sm:hidden">
+                              <td colSpan={6} className="p-3">
+                                <div className="space-y-2">
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="font-bold text-slate-800">
+                                      Species: {f.name} {f.code ? `(${f.code})` : ''}
+                                    </span>
+                                    <span
+                                      className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                        f.is_active
+                                          ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                          : 'bg-slate-100 text-slate-500 border-slate-200'
+                                      }`}
+                                    >
+                                      <span className={`w-1.5 h-1.5 rounded-full ${f.is_active ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+                                      {f.is_active ? 'Active' : 'Inactive'}
+                                    </span>
+                                  </div>
+                                  <p className="text-[11px] text-emerald-800 bg-white/70 p-2 rounded-lg border border-emerald-100 font-mono font-bold">
+                                    Rate Benchmark: ₹{parseFloat(f.default_rate || 0).toFixed(2)} / kg
+                                  </p>
+                                  <div className="grid grid-cols-3 gap-2 pt-1 border-t border-emerald-200/60">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleToggleActive(f)}
+                                      className={`py-2 px-2 rounded-xl text-xs font-bold border flex items-center justify-center gap-1.5 shadow-2xs ${
+                                        f.is_active
+                                          ? 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                                          : 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700'
+                                      }`}
+                                    >
+                                      <Power className="w-3.5 h-3.5" />
+                                      <span>{f.is_active ? 'Disable' : 'Enable'}</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenEdit(f)}
+                                      className="py-2 px-2 rounded-xl bg-white border border-slate-200 text-slate-800 font-bold text-xs flex items-center justify-center gap-1.5 hover:bg-slate-50 shadow-2xs"
+                                    >
+                                      <Edit2 className="w-3.5 h-3.5 text-emerald-600" />
+                                      <span>Edit</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setDeleteConfirmItem(f)}
+                                      className="py-2 px-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 font-bold text-xs flex items-center justify-center gap-1.5 hover:bg-rose-100 shadow-2xs"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                                      <span>Delete</span>
+                                    </button>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
                           )}
-                        </td>
-                        <td className="py-3 px-4 font-mono font-bold text-emerald-700">
-                          ₹{parseFloat(f.default_rate || 0).toFixed(2)} / kg
-                        </td>
-                        <td className="py-3 px-4">
-                          <span
-                            className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2 py-0.5 rounded-full border ${
-                              f.is_active
-                                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                                : 'bg-slate-100 text-slate-500 border-slate-200'
-                            }`}
-                          >
-                            <span className={`w-1.5 h-1.5 rounded-full ${f.is_active ? 'bg-emerald-500' : 'bg-slate-400'}`} />
-                            {f.is_active ? 'Active' : 'Inactive'}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            {canCurate && (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={() => handleToggleActive(f)}
-                                  title={f.is_active ? 'Deactivate species' : 'Activate species'}
-                                  className={`p-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1 transition-colors ${
-                                    f.is_active
-                                      ? 'border-slate-200 text-slate-500 hover:text-emerald-800 hover:bg-emerald-50'
-                                      : 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'
-                                  }`}
-                                >
-                                  <Power className="w-3.5 h-3.5" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenEdit(f)}
-                                  title="Edit Species"
-                                  className="p-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700"
-                                >
-                                  <Edit2 className="w-3.5 h-3.5" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setDeleteConfirmItem(f)}
-                                  title="Delete Species"
-                                  className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                        </React.Fragment>
+                      );
+                    })}
                   </tbody>
                 </table>
-                <div className="p-3 bg-slate-50 border-t border-slate-200 text-xs text-slate-500 flex items-center justify-between">
-                  <span>Total Fish Species: <strong>{filteredFishTypes.length}</strong></span>
-                  <span className="text-[11px] text-slate-400">Standard factory species catalog &amp; pricing benchmarks</span>
-                </div>
               </div>
-            )}
+              <div className="p-3 bg-slate-50 border-t border-slate-200 text-xs text-slate-500 flex items-center justify-between">
+                <span>Total Fish Species: <strong>{filteredFishTypes.length}</strong></span>
+                <span className="text-[11px] text-slate-400">Standard factory species catalog &amp; pricing benchmarks</span>
+              </div>
+            </>
+          )}
           </>
         )}
       </div>

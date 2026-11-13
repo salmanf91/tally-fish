@@ -15,7 +15,7 @@ import {
   Check,
   Edit3,
   Plus,
-  BadgeDollarSign,
+  IndianRupee,
   Clock,
   CheckCircle2,
   Trash2,
@@ -414,42 +414,8 @@ export default function StatementView({ onNavigateToRates, onNewEntry, onEditEnt
     }
   };
 
-  const handleShare = async () => {
-    if (filteredEntries.length === 0) {
-      setToastMessage('No entries to share');
-      setTimeout(() => setToastMessage(''), 3000);
-      return;
-    }
-
-    const branchName = activeBranch?.branch_name || 'Ullal';
-    const dateRangeLabel = fromDate === toDate ? fromDate : `${fromDate} to ${toDate}`;
-    const title = `Daily Procurement Statement - ${branchName} (${dateRangeLabel})`;
-
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title,
-          text: whatsappMessage,
-        });
-        setToastMessage('Statement shared successfully');
-        setTimeout(() => setToastMessage(''), 3000);
-        return;
-      } catch (err) {
-        if (err.name !== 'AbortError') {
-          console.warn('[Statement] navigator.share error:', err);
-        }
-      }
-    }
-
-    handleOpenShare();
-  };
-
-  const handleExportExcel = () => {
-    if (filteredEntries.length === 0) {
-      setToastMessage('No entries to export for selected dates/filters');
-      setTimeout(() => setToastMessage(''), 3000);
-      return;
-    }
+  const generateCSVContent = () => {
+    if (filteredEntries.length === 0) return '';
 
     const headers = [
       'SL No',
@@ -479,7 +445,12 @@ export default function StatementView({ onNavigateToRates, onNewEntry, onEditEnt
         rateDetails = lots
           .map((lot) => {
             const partsStr = lot.parts
-              .map((p) => `${p.fish}${lot.isMixed ? ` (${p.pct}%)` : ''}: ₹${p.rate !== null && p.rate !== undefined ? p.rate : '—'}`)
+              .map(
+                (p) =>
+                  `${p.fish}${lot.isMixed ? ` (${p.pct}%)` : ''}: ₹${
+                    p.rate !== null && p.rate !== undefined ? p.rate : '—'
+                  }`
+              )
               .join(', ');
             return `${lot.box_count} Box${lot.box_count > 1 ? 'es' : ''} [${partsStr}${
               lot.isMixed && lot.avgRate ? ` | Avg: ₹${lot.avgRate}/kg` : ''
@@ -493,7 +464,9 @@ export default function StatementView({ onNavigateToRates, onNewEntry, onEditEnt
       return [
         idx + 1,
         escapeCSV(dateStr),
-        escapeCSV(e.daily_sl_no ? `SL-${String(e.daily_sl_no).padStart(3, '0')}` : (e.slip_no || `SL-${idx + 1}`)),
+        escapeCSV(
+          e.daily_sl_no ? `SL-${String(e.daily_sl_no).padStart(3, '0')}` : e.slip_no || `SL-${idx + 1}`
+        ),
         escapeCSV(e.party_name),
         escapeCSV(e.vehicle_no || ''),
         parseFloat(e.gross_loaded_kg) || 0,
@@ -517,16 +490,76 @@ export default function StatementView({ onNavigateToRates, onNewEntry, onEditEnt
       '',
       '',
       '',
-      totalGross,
-      totalTare,
-      totalIce,
-      totalNet,
+      totalGross.toFixed(2),
+      totalTare.toFixed(2),
+      totalIce.toFixed(2),
+      totalNet.toFixed(2),
       '',
       '',
       '',
     ].join(',');
 
-    const csvContent = '\uFEFF' + [headers.join(','), ...rows, totalsRow].join('\r\n');
+    return '\uFEFF' + [headers.join(','), ...rows, totalsRow].join('\r\n');
+  };
+
+  const handleShare = async () => {
+    if (filteredEntries.length === 0) {
+      setToastMessage('No entries to share');
+      setTimeout(() => setToastMessage(''), 3000);
+      return;
+    }
+
+    const branchName = activeBranch?.branch_name || 'Ullal';
+    const dateRangeLabel = fromDate === toDate ? fromDate : `${fromDate} to ${toDate}`;
+    const title = `Daily Statement - ${branchName} (${dateRangeLabel})`;
+
+    if (navigator.share) {
+      try {
+        const csvContent = generateCSVContent();
+        const branchCode = (activeBranch?.branch_code || 'BRANCH').toUpperCase();
+        const fileName = `Statement_${branchCode}_${fromDate}_to_${toDate}.csv`;
+        const file = new File([csvContent], fileName, { type: 'text/csv' });
+
+        // If platform supports sharing files (e.g. mobile share sheet)
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            title,
+            text: whatsappMessage,
+            files: [file],
+          });
+          setToastMessage('Statement & Excel file shared successfully!');
+          setTimeout(() => setToastMessage(''), 3000);
+          return;
+        }
+
+        // Text fallback for browsers without file share support
+        await navigator.share({
+          title,
+          text: whatsappMessage,
+        });
+        setToastMessage('Statement summary shared successfully');
+        setTimeout(() => setToastMessage(''), 3000);
+        return;
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          console.warn('[Statement] navigator.share error:', err);
+        } else {
+          return;
+        }
+      }
+    }
+
+    handleOpenShare();
+  };
+
+  const handleExportExcel = () => {
+    if (filteredEntries.length === 0) {
+      setToastMessage('No entries to export for selected dates/filters');
+      setTimeout(() => setToastMessage(''), 3000);
+      return;
+    }
+
+    const csvContent = generateCSVContent();
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -551,7 +584,7 @@ export default function StatementView({ onNavigateToRates, onNewEntry, onEditEnt
 
     const branchCode = activeBranch?.branch_code || 'ULLAL';
     const branchName = activeBranch?.branch_name || 'Ullal Unit';
-    const title = `Daily Procurement Statement - ${branchName}`;
+    const title = `Daily Statement - ${branchName}`;
 
     const totalGross = filteredEntries.reduce((s, e) => s + (parseFloat(e.gross_loaded_kg) || 0), 0);
     const totalTare = filteredEntries.reduce((s, e) => s + (parseFloat(e.empty_tare_kg) || 0), 0);
@@ -819,7 +852,7 @@ export default function StatementView({ onNavigateToRates, onNewEntry, onEditEnt
         <div>
           <h2 className="text-base font-black text-slate-900 flex items-center gap-2">
             <FileSpreadsheet className="w-5 h-5 text-amber-600" />
-            Daily Procurement Statement
+            Daily Statement
           </h2>
           <p className="text-xs text-slate-500">
             <span className="font-semibold text-slate-700">{fromDate === toDate ? 'Date: ' : 'Period: '}</span>
@@ -948,8 +981,8 @@ export default function StatementView({ onNavigateToRates, onNewEntry, onEditEnt
         </div>
 
         {/* From - To date inputs */}
-        <div className="grid grid-cols-2 gap-2">
-          <div>
+        <div className="grid grid-cols-2 gap-2 sm:gap-3">
+          <div className="min-w-0">
             <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
               From
             </label>
@@ -957,10 +990,11 @@ export default function StatementView({ onNavigateToRates, onNewEntry, onEditEnt
               type="date"
               value={fromDate}
               onChange={(e) => setFromDate(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800"
+              className="w-full min-w-0 max-w-full bg-slate-50 border border-slate-300 rounded-xl px-2 py-1.5 text-[11px] sm:text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-amber-500 box-border"
+              style={{ minWidth: 0, maxWidth: '100%' }}
             />
           </div>
-          <div>
+          <div className="min-w-0">
             <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
               To
             </label>
@@ -968,7 +1002,8 @@ export default function StatementView({ onNavigateToRates, onNewEntry, onEditEnt
               type="date"
               value={toDate}
               onChange={(e) => setToDate(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800"
+              className="w-full min-w-0 max-w-full bg-slate-50 border border-slate-300 rounded-xl px-2 py-1.5 text-[11px] sm:text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-amber-500 box-border"
+              style={{ minWidth: 0, maxWidth: '100%' }}
             />
           </div>
         </div>
@@ -1195,7 +1230,7 @@ export default function StatementView({ onNavigateToRates, onNewEntry, onEditEnt
                               }}
                               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all active:scale-95"
                             >
-                              <BadgeDollarSign className="w-3.5 h-3.5" />
+                              <IndianRupee className="w-3.5 h-3.5" />
                               <span>Set Rate</span>
                             </button>
                           ) : (
@@ -1317,10 +1352,12 @@ export default function StatementView({ onNavigateToRates, onNewEntry, onEditEnt
               </div>
             )}
 
-            <div>
-              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
-                Attach File Format
-              </label>
+            {/* Download File to Attach */}
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-slate-700">1. Download Report File:</span>
+                <span className="text-[10px] text-slate-500 font-semibold">Pick format</span>
+              </div>
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -1328,10 +1365,10 @@ export default function StatementView({ onNavigateToRates, onNewEntry, onEditEnt
                     setShareFormat('Excel');
                     handleExportExcel();
                   }}
-                  className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-1.5 ${
+                  className={`flex-1 py-2 px-2.5 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-1.5 ${
                     shareFormat === 'Excel'
                       ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
-                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
                   }`}
                 >
                   <Download className="w-3.5 h-3.5" />
@@ -1343,26 +1380,29 @@ export default function StatementView({ onNavigateToRates, onNewEntry, onEditEnt
                     setShareFormat('PDF');
                     handleExportPDF();
                   }}
-                  className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-1.5 ${
+                  className={`flex-1 py-2 px-2.5 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-1.5 ${
                     shareFormat === 'PDF'
                       ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
-                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
                   }`}
                 >
                   <Printer className="w-3.5 h-3.5" />
                   PDF Report
                 </button>
               </div>
+              <p className="text-[10px] text-slate-500 leading-tight">
+                💡 <em>WhatsApp web links send the complete formatted text below. To attach the downloaded file, click the 📎 Paperclip button in WhatsApp.</em>
+              </p>
             </div>
 
             <div>
               <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
-                Message Preview
+                2. Message Preview (Sent to WhatsApp)
               </label>
               <textarea
                 readOnly
                 value={whatsappMessage}
-                className="w-full h-32 bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-mono text-slate-700 resize-none"
+                className="w-full h-28 bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-mono text-slate-700 resize-none"
               />
             </div>
 

@@ -39,13 +39,10 @@ function MainApp() {
   // Set default tab based on the user's role upon login
   useEffect(() => {
     if (isAuthenticated && currentRole) {
-      if (currentRole === 'staffAdmin') {
+      if (currentRole === 'staffAdmin' || currentRole === 'owner') {
         setActiveTab('today');
       } else if (currentRole === 'billingAdmin') {
         setActiveTab('billing');
-      } else {
-        // Owner lands on statement with quick "Set rate" action
-        setActiveTab('statement');
       }
     }
   }, [isAuthenticated, currentRole]);
@@ -92,7 +89,7 @@ function MainApp() {
 
   return (
     <AppLayout activeTab={activeTab} onSelectTab={setActiveTab}>
-      {/* Staff Admin Views */}
+      {/* Staff Admin & Owner Intake Views */}
       {activeTab === 'today' && (
         <TodayView
           onNewEntry={() => {
@@ -104,6 +101,10 @@ function MainApp() {
             setActiveTab('new');
           }}
           onViewLockedEntry={(entry) => setLockedModalEntry(entry)}
+          onNavigateToRates={(id) => {
+            setSelectedRateEntryId(id || null);
+            setActiveTab('rates');
+          }}
         />
       )}
 
@@ -114,7 +115,7 @@ function MainApp() {
             queryClient.invalidateQueries({ queryKey: ['entries'] });
             setEditingEntry(null);
             if (currentRole === 'owner') {
-              setActiveTab('statement');
+              setActiveTab('today');
             } else if (currentRole === 'billingAdmin') {
               setActiveTab('statement');
             } else {
@@ -124,7 +125,7 @@ function MainApp() {
           onCancel={() => {
             setEditingEntry(null);
             if (currentRole === 'owner') {
-              setActiveTab('statement');
+              setActiveTab('today');
             } else if (currentRole === 'billingAdmin') {
               setActiveTab('statement');
             } else {
@@ -159,6 +160,8 @@ function MainApp() {
             setSelectedRateEntryId(null);
             if (currentRole === 'billingAdmin') {
               setActiveTab('billing');
+            } else if (currentRole === 'owner') {
+              setActiveTab('today');
             } else {
               setActiveTab('statement');
             }

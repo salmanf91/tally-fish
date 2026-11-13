@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   Scale,
   FileSpreadsheet,
-  BadgeDollarSign,
+  IndianRupee,
   Users,
   Bell,
   LogOut,
@@ -64,13 +64,13 @@ export default function DesktopSidebar({ activeTab, onSelectTab, isOnline = true
 
   // Navigation Items tailored per role matching the workflow prototype
   const navItems = [
-    // Staff Admin / Operator: Today
+    // Staff Admin / Owner: Today
     {
       id: 'today',
-      label: 'Today',
+      label: "Today's Intake",
       icon: Clock,
       permission: 'slips:view',
-      roles: ['staffAdmin'],
+      roles: ['owner', 'staffAdmin'],
     },
     {
       id: 'new',
@@ -91,7 +91,7 @@ export default function DesktopSidebar({ activeTab, onSelectTab, isOnline = true
     {
       id: 'rates',
       label: 'Set rate',
-      icon: BadgeDollarSign,
+      icon: IndianRupee,
       permission: 'rates:set',
       roles: ['owner'],
       badge: pendingRatesCount > 0 ? `${pendingRatesCount} pending` : null,

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { BadgeDollarSign, Lock, Check, AlertCircle, ArrowRight, ArrowLeft, SkipForward } from 'lucide-react';
+import { IndianRupee, Lock, Check, AlertCircle, ArrowRight, ArrowLeft, SkipForward } from 'lucide-react';
 import { useBranch } from '../context/BranchContext';
 import { api } from '../services/api';
 import { saveOfflineRateFix } from '../services/db';
@@ -276,7 +276,7 @@ export default function RatesView({ initialEntryId = null, onDone }) {
       <div className="space-y-4 w-full max-w-4xl mx-auto">
         <div className="light-card p-4 rounded-2xl flex items-center justify-between">
           <h2 className="text-base font-black text-slate-900 flex items-center gap-2">
-            <BadgeDollarSign className="w-5 h-5 text-amber-600" />
+            <IndianRupee className="w-5 h-5 text-amber-600" />
             Set Rate
           </h2>
           <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200">
@@ -355,7 +355,7 @@ export default function RatesView({ initialEntryId = null, onDone }) {
         <div className="light-card p-3.5 rounded-2xl space-y-2.5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <BadgeDollarSign className="w-4 h-4 text-amber-600" />
+              <IndianRupee className="w-4 h-4 text-amber-600" />
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
                 Pending Slips Queue
               </h3>

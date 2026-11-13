@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   Trash2,
   Edit3,
+  IndianRupee,
 } from 'lucide-react';
 import { useBranch } from '../context/BranchContext';
 import { api } from '../services/api';
@@ -26,7 +27,7 @@ const getLocalDateString = (d = new Date()) => {
   return `${year}-${month}-${day}`;
 };
 
-export default function TodayView({ onNewEntry, onEditEntry, onViewLockedEntry }) {
+export default function TodayView({ onNewEntry, onEditEntry, onViewLockedEntry, onNavigateToRates }) {
   const { activeBranchId, activeBranch } = useBranch();
   const queryClient = useQueryClient();
 
@@ -416,9 +417,27 @@ export default function TodayView({ onNewEntry, onEditEntry, onViewLockedEntry }
                       )}
                     </div>
 
-                    {/* Quick Edit & Delete Actions */}
+                    {/* Quick Set Rate, Edit & Delete Actions */}
                     {(!isLocked || !isStaff) && (
                       <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+                        {!isStaff && onNavigateToRates && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onNavigateToRates(entry.id);
+                            }}
+                            className={`px-2.5 py-1.5 rounded-lg border font-bold text-xs flex items-center gap-1 transition-colors shadow-2xs ${
+                              entry.status === 'RATE_PENDING'
+                                ? 'border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900'
+                                : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                            }`}
+                            title={entry.status === 'RATE_PENDING' ? 'Set rate for this slip' : 'Edit rate for this slip'}
+                          >
+                            <IndianRupee className="w-3 h-3 text-amber-600" />
+                            <span>{entry.status === 'RATE_PENDING' ? 'Set Rate' : 'Edit Rate'}</span>
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={(e) => {
