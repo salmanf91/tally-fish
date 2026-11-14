@@ -19,6 +19,8 @@ import {
   Clock,
   CheckCircle2,
   Trash2,
+  LayoutGrid,
+  Table as TableIcon,
 } from 'lucide-react';
 import { useBranch } from '../context/BranchContext';
 import { useAuth } from '../context/AuthContext';
@@ -138,6 +140,67 @@ export function getEntryLots(entry) {
   });
 }
 
+export function getRateSummary(entry) {
+  if (!entry || !Array.isArray(entry.rates) || entry.rates.length === 0) {
+    return {
+      rateLabel: 'Rate pending',
+      breakdown: '',
+      avgRate: 0,
+      totalAmount: 0,
+    };
+  }
+
+  const ratesMap = {};
+  entry.rates.forEach((r) => {
+    ratesMap[(r.fish_name || '').trim().toUpperCase()] = Number(r.rate_per_kg) || 0;
+  });
+
+  const boxes = Array.isArray(entry.boxes) ? entry.boxes : [];
+  let totalFactor = 0;
+  let weightedSum = 0;
+
+  if (boxes.length > 0) {
+    boxes.forEach((b) => {
+      const bCount = Number(b.box_count) || 1;
+      const pct = Number(b.mix_percentage) || 100;
+      const factor = bCount * (pct / 100);
+      const fish = (b.fish_name || '').trim().toUpperCase();
+      const rate = ratesMap[fish] || 0;
+      totalFactor += factor;
+      weightedSum += factor * rate;
+    });
+  }
+
+  const avgRate =
+    entry.average_rate !== undefined
+      ? Number(entry.average_rate)
+      : totalFactor > 0
+      ? Math.round((weightedSum / totalFactor) * 100) / 100
+      : Number(entry.rates[0]?.rate_per_kg) || 0;
+
+  const netKg = Number(entry.net_kg) || 0;
+  const totalAmount =
+    entry.total_amount !== undefined
+      ? Number(entry.total_amount)
+      : Math.round(netKg * avgRate * 100) / 100;
+
+  const breakdown = entry.rates
+    .map((r) => `${r.fish_name} ₹${r.rate_per_kg}`)
+    .join(' + ');
+
+  const rateLabel =
+    entry.rates.length === 1
+      ? `₹${entry.rates[0].rate_per_kg} / kg`
+      : `Avg ₹${avgRate.toFixed(2)} / kg`;
+
+  return {
+    rateLabel,
+    breakdown,
+    avgRate,
+    totalAmount,
+  };
+}
+
 export default function StatementView({ onNavigateToRates, onNewEntry, onEditEntry }) {
   const { activeBranchId, activeBranch, availableBranches, setActiveBranchId } = useBranch();
   const { user } = useAuth();
@@ -145,6 +208,8 @@ export default function StatementView({ onNavigateToRates, onNewEntry, onEditEnt
 
   const isBilling = activeBranch?.role === 'billingAdmin';
   const isOwner = activeBranch?.role === 'owner';
+
+  const [viewMode, setViewMode] = useState('cards'); // 'cards' (matches billing cards) | 'table'
 
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -1127,10 +1192,53 @@ export default function StatementView({ onNavigateToRates, onNewEntry, onEditEnt
         </div>
       </div>
 
-      {/* Procurement Slips Table */}
-      <div className="light-card rounded-2xl overflow-hidden overflow-x-auto">
+      {/* Procurement Slips Section (Header + Cards / Table Switcher) */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between pb-0.5">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+              {statementMode === 'pending'
+                ? 'Pending Intake Slips'
+                : statementMode === 'settled'
+                ? 'Settled Statements'
+                : 'Procurement Slips'}
+            </span>
+            <span className="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-slate-100 text-slate-700 border border-slate-200">
+              {filteredEntries.length}
+            </span>
+          </div>
+          <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200">
+            <button
+              type="button"
+              onClick={() => setViewMode('cards')}
+              className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold rounded-lg transition-all ${
+                viewMode === 'cards'
+                  ? 'bg-white text-slate-900 shadow-2xs'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+              title="Cards View (matches Billing cards)"
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+              <span>Cards</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('table')}
+              className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold rounded-lg transition-all ${
+                viewMode === 'table'
+                  ? 'bg-white text-slate-900 shadow-2xs'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+              title="Table View"
+            >
+              <TableIcon className="w-3.5 h-3.5" />
+              <span>Table</span>
+            </button>
+          </div>
+        </div>
+
         {filteredEntries.length === 0 ? (
-          <div className="p-8 text-center space-y-3">
+          <div className="light-card rounded-2xl p-8 text-center space-y-3">
             <p className="text-slate-500 text-xs font-medium">
               {statementMode === 'pending'
                 ? `No pending intake slips for ${activeBranch?.branch_name}. All slips have rates set!`
@@ -1155,150 +1263,271 @@ export default function StatementView({ onNavigateToRates, onNewEntry, onEditEnt
               </div>
             )}
           </div>
-        ) : (
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                <th className="py-2.5 px-3">SL</th>
-                <th className="py-2.5 px-3">Party / Vehicle</th>
-                <th className="py-2.5 px-3 text-right">Net kg</th>
-                <th className="py-2.5 px-3 text-right">Rate</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-xs">
-              {filteredEntries.map((e, idx) => {
-                const needsRate = e.status === 'RATE_PENDING';
-                return (
-                  <tr key={e.id} className="hover:bg-slate-50/50">
-                    <td className="py-3 px-3 font-mono font-bold text-slate-700 whitespace-nowrap">
-                      {e.daily_sl_no ? `SL-${String(e.daily_sl_no).padStart(3, '0')}` : `#${idx + 1}`}
-                    </td>
-                    <td className="py-3 px-3">
-                      <strong className="text-slate-900 block text-sm">{e.party_name}</strong>
-                      <span className="text-slate-500 font-mono text-[11px] block">
-                        {e.vehicle_no || 'Weights pending'}
+        ) : viewMode === 'cards' ? (
+          /* Cards View - Matching Billing Module Cards */
+          <div className="grid grid-cols-1 desktop:grid-cols-2 gap-3">
+            {filteredEntries.map((entry, idx) => {
+              const needsRate = entry.status === 'RATE_PENDING';
+              const rateInfo = getRateSummary(entry);
+
+              return (
+                <div key={entry.id} className="light-card p-4 rounded-2xl space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-7 h-7 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center font-mono font-bold text-xs">
+                        #{entry.daily_sl_no || (idx + 1)}
                       </span>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        {onEditEntry && (
-                          <button
-                            type="button"
-                            onClick={() => onEditEntry(e)}
-                            className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-amber-800 transition-colors"
-                            title="Edit intake slip details (boxes, weights, vehicle)"
-                          >
-                            <Edit3 className="w-2.5 h-2.5" />
-                            <span>Edit</span>
-                          </button>
-                        )}
-                        {(isOwner || isBilling) && (
-                          <button
-                            type="button"
-                            onClick={(ev) => {
-                              ev.stopPropagation();
-                              setDeleteTarget(e);
-                            }}
-                            className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-rose-700 transition-colors"
-                            title="Delete this intake slip"
-                          >
-                            <Trash2 className="w-2.5 h-2.5" />
-                            <span>Delete</span>
-                          </button>
+                      <div>
+                        <h4 className="font-bold text-sm text-slate-900 leading-tight">{entry.party_name}</h4>
+                        {fromDate !== toDate && entry.date && (
+                          <span className="text-[10px] text-slate-400 font-mono font-medium block">
+                            {entry.date}
+                          </span>
                         )}
                       </div>
-                    </td>
-                    <td className="py-3 px-3 text-right font-mono font-bold text-slate-800">
-                      {Number(e.net_kg).toLocaleString()}
-                    </td>
-                    <td
-                      onClick={() => {
-                        if ((isOwner || isBilling) && onNavigateToRates) {
-                          onNavigateToRates(e.id);
-                        }
-                      }}
-                      className={`py-3 px-3 text-right font-mono ${
-                        isOwner || isBilling ? 'cursor-pointer hover:opacity-80' : ''
-                      }`}
-                    >
-                      {needsRate ? (
-                        <div className="inline-flex flex-col items-end gap-1.5">
-                          {(isOwner || isBilling) && onNavigateToRates ? (
-                            <button
-                              type="button"
-                              onClick={(ev) => {
-                                ev.stopPropagation();
-                                onNavigateToRates(e.id);
-                              }}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all active:scale-95"
-                            >
-                              <IndianRupee className="w-3.5 h-3.5" />
-                              <span>Set Rate</span>
-                            </button>
-                          ) : (
-                            <span className="text-amber-700 font-bold text-xs bg-amber-50 border border-amber-300 px-2 py-1 rounded-md inline-block">
-                              Rate Pending
-                            </span>
-                          )}
-                        </div>
+                    </div>
+                    {needsRate ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200">
+                        <Clock className="w-3 h-3 text-amber-600" /> Rate Pending
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Admin Approved
+                      </span>
+                    )}
+                  </div>
+
+                  <p className="text-xs text-slate-600 font-mono">
+                    {entry.remarks || getEntryLots(entry).map((l) => `${l.box_count} Box${l.box_count > 1 ? 'es' : ''} ${l.parts.map((p) => p.fish).join('/')}`).join(' · ') || 'No remarks'}
+                  </p>
+
+                  <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100 font-mono">
+                    <span className="text-slate-500">
+                      {entry.vehicle_no || 'Weights recorded'} · {Number(entry.net_kg).toLocaleString()} kg
+                    </span>
+                    <span className={`font-bold text-sm ${needsRate ? 'text-amber-600 font-medium' : 'text-amber-700'}`}>
+                      {needsRate ? 'Rate pending' : rateInfo.rateLabel}
+                    </span>
+                  </div>
+
+                  {/* Rate Breakdown and Slip Value */}
+                  <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-mono space-y-1">
+                    {rateInfo.breakdown ? (
+                      <div className="text-[11px] text-slate-600 truncate" title={rateInfo.breakdown}>
+                        {rateInfo.breakdown}
+                      </div>
+                    ) : (
+                      <div className="text-[11px] text-slate-400 italic">
+                        {needsRate ? 'Waiting for rate approval' : 'Standard benchmark pricing'}
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-200/60">
+                      <span className="text-slate-500 font-medium">Total Slip Value:</span>
+                      <span className="font-bold text-slate-900">
+                        {needsRate ? '—' : `₹${rateInfo.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex flex-wrap items-center gap-2 mt-2 pt-2 border-t border-slate-100">
+                    {onEditEntry && (
+                      <button
+                        type="button"
+                        onClick={() => onEditEntry(entry)}
+                        className="flex-1 min-w-[95px] py-2 px-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 font-bold text-xs hover:bg-slate-100 flex items-center justify-center gap-1.5 shadow-2xs transition-colors"
+                      >
+                        <Edit3 className="w-3.5 h-3.5 text-slate-500" />
+                        <span>Edit Slip</span>
+                      </button>
+                    )}
+                    {(isOwner || isBilling) && onNavigateToRates && (
+                      needsRate ? (
+                        <button
+                          type="button"
+                          onClick={() => onNavigateToRates(entry.id)}
+                          className="flex-1 min-w-[95px] py-2 px-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs transition-all active:scale-95"
+                        >
+                          <IndianRupee className="w-3.5 h-3.5" />
+                          <span>Set Rate</span>
+                        </button>
                       ) : (
-                        <div className="space-y-1.5 inline-flex flex-col items-end">
-                          {getEntryLots(e).map((lot, lIdx) => (
-                            <div
-                              key={lot.groupId || lIdx}
-                              className="p-2 rounded-xl bg-slate-50 border border-slate-200 text-left text-xs leading-tight min-w-[155px] shadow-2xs"
-                            >
-                              <div className="flex items-center justify-between gap-2 font-bold text-slate-700 pb-1 border-b border-slate-200/70 text-[10px]">
-                                <span className="font-mono text-slate-800 font-black">
-                                  {lot.box_count} {lot.box_count === 1 ? 'Box' : 'Boxes'} {lot.isMixed ? '· Mixed' : ''}
-                                </span>
-                                {lot.isMixed && lot.avgRate ? (
-                                  <span className="text-blue-700 font-mono font-bold">
-                                    Avg ₹{lot.avgRate}
-                                  </span>
-                                ) : !lot.isMixed && lot.avgRate ? (
-                                  <span className="text-slate-900 font-mono font-bold">
-                                    ₹{lot.avgRate}
-                                  </span>
-                                ) : null}
-                              </div>
-                              <div className="pt-1.5 space-y-1">
-                                {lot.parts.map((p, pIdx) => (
-                                  <div
-                                    key={pIdx}
-                                    className="flex items-center justify-between gap-3 text-slate-600 font-mono text-[11px]"
-                                  >
-                                    <span>
-                                      {p.fish} {lot.isMixed ? `(${p.pct}%)` : ''}
-                                    </span>
-                                    <span className="font-bold text-slate-900">
-                                      {p.rate !== null && p.rate !== undefined ? `₹${p.rate}` : '—'}
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          ))}
-                          {(isOwner || isBilling) && onNavigateToRates && (
+                        <button
+                          type="button"
+                          onClick={() => onNavigateToRates(entry.id)}
+                          className="flex-1 min-w-[95px] py-2 px-2.5 rounded-xl bg-white border border-amber-300 text-amber-900 font-bold text-xs hover:bg-amber-50 flex items-center justify-center gap-1.5 shadow-2xs transition-colors"
+                        >
+                          <IndianRupee className="w-3.5 h-3.5 text-amber-600" />
+                          <span>Edit Rates</span>
+                        </button>
+                      )
+                    )}
+                    {(isOwner || isBilling) && (
+                      <button
+                        type="button"
+                        onClick={(ev) => {
+                          ev.stopPropagation();
+                          setDeleteTarget(entry);
+                        }}
+                        className="py-2 px-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 font-bold text-xs hover:bg-rose-100 flex items-center justify-center gap-1 shadow-2xs transition-colors ml-auto sm:ml-0"
+                        title="Delete Slip"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                        <span className="sm:inline">Delete</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          /* Table View - Spreadsheet / Compact Datatable */
+          <div className="light-card rounded-2xl overflow-hidden overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                  <th className="py-2.5 px-3">SL</th>
+                  <th className="py-2.5 px-3">Party / Vehicle</th>
+                  <th className="py-2.5 px-3 text-right">Net kg</th>
+                  <th className="py-2.5 px-3 text-right">Rate</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-xs">
+                {filteredEntries.map((e, idx) => {
+                  const needsRate = e.status === 'RATE_PENDING';
+                  return (
+                    <tr key={e.id} className="hover:bg-slate-50/50">
+                      <td className="py-3 px-3 font-mono font-bold text-slate-700 whitespace-nowrap">
+                        {e.daily_sl_no ? `SL-${String(e.daily_sl_no).padStart(3, '0')}` : `#${idx + 1}`}
+                      </td>
+                      <td className="py-3 px-3">
+                        <strong className="text-slate-900 block text-sm">{e.party_name}</strong>
+                        <span className="text-slate-500 font-mono text-[11px] block">
+                          {e.vehicle_no || 'Weights pending'}
+                        </span>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          {onEditEntry && (
                             <button
                               type="button"
-                              onClick={(ev) => {
-                                ev.stopPropagation();
-                                onNavigateToRates(e.id);
-                              }}
-                              className="inline-flex items-center gap-1 px-2 py-0.5 mt-1 rounded-lg border border-slate-200 bg-white hover:bg-amber-50 hover:border-amber-300 text-slate-600 hover:text-amber-800 text-[10px] font-bold shadow-2xs transition-all"
-                              title="Edit rates for this entry"
+                              onClick={() => onEditEntry(e)}
+                              className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-amber-800 transition-colors"
+                              title="Edit intake slip details (boxes, weights, vehicle)"
                             >
                               <Edit3 className="w-2.5 h-2.5" />
-                              <span>Edit rate</span>
+                              <span>Edit</span>
+                            </button>
+                          )}
+                          {(isOwner || isBilling) && (
+                            <button
+                              type="button"
+                              onClick={(ev) => {
+                                ev.stopPropagation();
+                                setDeleteTarget(e);
+                              }}
+                              className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-rose-700 transition-colors"
+                              title="Delete this intake slip"
+                            >
+                              <Trash2 className="w-2.5 h-2.5" />
+                              <span>Delete</span>
                             </button>
                           )}
                         </div>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                      </td>
+                      <td className="py-3 px-3 text-right font-mono font-bold text-slate-800">
+                        {Number(e.net_kg).toLocaleString()}
+                      </td>
+                      <td
+                        onClick={() => {
+                          if ((isOwner || isBilling) && onNavigateToRates) {
+                            onNavigateToRates(e.id);
+                          }
+                        }}
+                        className={`py-3 px-3 text-right font-mono ${
+                          isOwner || isBilling ? 'cursor-pointer hover:opacity-80' : ''
+                        }`}
+                      >
+                        {needsRate ? (
+                          <div className="inline-flex flex-col items-end gap-1.5">
+                            {(isOwner || isBilling) && onNavigateToRates ? (
+                              <button
+                                type="button"
+                                onClick={(ev) => {
+                                  ev.stopPropagation();
+                                  onNavigateToRates(e.id);
+                                }}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all active:scale-95"
+                              >
+                                <IndianRupee className="w-3.5 h-3.5" />
+                                <span>Set Rate</span>
+                              </button>
+                            ) : (
+                              <span className="text-amber-700 font-bold text-xs bg-amber-50 border border-amber-300 px-2 py-1 rounded-md inline-block">
+                                Rate Pending
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="space-y-1.5 inline-flex flex-col items-end">
+                            {getEntryLots(e).map((lot, lIdx) => (
+                              <div
+                                key={lot.groupId || lIdx}
+                                className="p-2 rounded-xl bg-slate-50 border border-slate-200 text-left text-xs leading-tight min-w-[155px] shadow-2xs"
+                              >
+                                <div className="flex items-center justify-between gap-2 font-bold text-slate-700 pb-1 border-b border-slate-200/70 text-[10px]">
+                                  <span className="font-mono text-slate-800 font-black">
+                                    {lot.box_count} {lot.box_count === 1 ? 'Box' : 'Boxes'} {lot.isMixed ? '· Mixed' : ''}
+                                  </span>
+                                  {lot.isMixed && lot.avgRate ? (
+                                    <span className="text-blue-700 font-mono font-bold">
+                                      Avg ₹{lot.avgRate}
+                                    </span>
+                                  ) : !lot.isMixed && lot.avgRate ? (
+                                    <span className="text-slate-900 font-mono font-bold">
+                                      ₹{lot.avgRate}
+                                    </span>
+                                  ) : null}
+                                </div>
+                                <div className="pt-1.5 space-y-1">
+                                  {lot.parts.map((p, pIdx) => (
+                                    <div
+                                      key={pIdx}
+                                      className="flex items-center justify-between gap-3 text-slate-600 font-mono text-[11px]"
+                                    >
+                                      <span>
+                                        {p.fish} {lot.isMixed ? `(${p.pct}%)` : ''}
+                                      </span>
+                                      <span className="font-bold text-slate-900">
+                                        {p.rate !== null && p.rate !== undefined ? `₹${p.rate}` : '—'}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                            {(isOwner || isBilling) && onNavigateToRates && (
+                              <button
+                                type="button"
+                                onClick={(ev) => {
+                                  ev.stopPropagation();
+                                  onNavigateToRates(e.id);
+                                }}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 mt-1 rounded-lg border border-slate-200 bg-white hover:bg-amber-50 hover:border-amber-300 text-slate-600 hover:text-amber-800 text-[10px] font-bold shadow-2xs transition-all"
+                                title="Edit rates for this entry"
+                              >
+                                <IndianRupee className="w-2.5 h-2.5" />
+                                <span>Edit rate</span>
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
