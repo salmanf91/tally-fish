@@ -3,12 +3,17 @@
  * Standalone PWA offline cache, App Shell lifecycle, and W3C Web Push handling
  */
 
-const CACHE_NAME = 'tally-fish-v3';
+const CACHE_NAME = 'tally-fish-v4';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/manifest.webmanifest',
   '/icon.svg',
+  '/favicon.svg',
+  '/favicon.ico',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/apple-touch-icon.png',
 ];
 
 const isLocalhost = self.location.hostname === 'localhost' || self.location.hostname === '127.0.0.1';
