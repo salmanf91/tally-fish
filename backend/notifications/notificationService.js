@@ -111,8 +111,8 @@ function buildEntryCreatedPayload(entry) {
   return {
     title,
     body: bodyText,
-    icon: '/icons/icon-192x192.png',
-    badge: '/icons/badge-72x72.png',
+    icon: '/icon-192.png',
+    badge: '/icon.svg',
     tag: `entry-${entry.id}`,
     data: {
       type: 'ENTRY_CREATED',
