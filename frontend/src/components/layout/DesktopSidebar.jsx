@@ -64,30 +64,7 @@ export default function DesktopSidebar({ activeTab, onSelectTab, isOnline = true
 
   // Navigation Items tailored per role matching the workflow prototype
   const navItems = [
-    // Staff Admin / Owner: Today
-    {
-      id: 'today',
-      label: "Today's Intake",
-      icon: Clock,
-      permission: 'slips:view',
-      roles: ['owner', 'staffAdmin'],
-    },
-    {
-      id: 'new',
-      label: 'New entry',
-      icon: PlusCircle,
-      permission: 'slips:create',
-      roles: ['owner', 'billingAdmin', 'staffAdmin'],
-    },
-    {
-      id: 'statement',
-      label: 'Statement',
-      icon: FileSpreadsheet,
-      permission: 'statement:view',
-      roles: ['owner', 'billingAdmin'],
-    },
-
-    // Owner: Set rate, Accounts
+    // Owner primary: Set rate
     {
       id: 'rates',
       label: 'Set rate',
@@ -97,6 +74,31 @@ export default function DesktopSidebar({ activeTab, onSelectTab, isOnline = true
       badge: pendingRatesCount > 0 ? `${pendingRatesCount} pending` : null,
       badgeColor: 'amber',
     },
+
+    // Staff Admin / Owner: Today
+    {
+      id: 'today',
+      label: "Today's Intake",
+      icon: Clock,
+      permission: 'slips:view',
+      roles: ['owner', 'staffAdmin'],
+    },
+    {
+      id: 'statement',
+      label: 'Statement',
+      icon: FileSpreadsheet,
+      permission: 'statement:view',
+      roles: ['owner', 'billingAdmin'],
+    },
+    {
+      id: 'new',
+      label: 'New entry',
+      icon: PlusCircle,
+      permission: 'slips:create',
+      roles: ['owner', 'billingAdmin', 'staffAdmin'],
+    },
+
+    // Owner: Accounts
     {
       id: 'accounts',
       label: 'Accounts',
