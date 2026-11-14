@@ -17,10 +17,10 @@ export default function MobileTouchNav({ activeTab, onSelectTab }) {
 
   if (currentRole === 'owner') {
     tabs = [
-      { id: 'today', label: 'Today', icon: Clock },
-      { id: 'statement', label: 'Statement', icon: FileSpreadsheet },
-      { id: 'new', label: 'New entry', icon: PlusCircle },
       { id: 'rates', label: 'Set rate', icon: IndianRupee },
+      { id: 'statement', label: 'Statement', icon: FileSpreadsheet },
+      { id: 'today', label: 'Today', icon: Clock },
+      { id: 'new', label: 'New entry', icon: PlusCircle },
       { id: 'accounts', label: 'Accounts', icon: UserCheck },
     ];
   } else if (currentRole === 'billingAdmin') {

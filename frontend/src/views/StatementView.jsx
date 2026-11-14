@@ -1012,13 +1012,13 @@ export default function StatementView({ onNavigateToRates, onNewEntry, onEditEnt
           onClick={() => setStatementMode('all')}
           className={`px-3 py-2.5 rounded-xl text-xs font-bold transition-all hidden sm:flex items-center gap-1.5 ${
             statementMode === 'all'
-              ? 'bg-slate-800 text-white shadow-sm'
+              ? 'bg-amber-500 text-white shadow-sm ring-1 ring-amber-400'
               : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50'
           }`}
         >
           <span>All Slips</span>
-          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono ${
-            statementMode === 'all' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-600'
+          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono font-bold ${
+            statementMode === 'all' ? 'bg-amber-600 text-white' : 'bg-slate-100 text-slate-600'
           }`}>
             {settledCount + pendingCount}
           </span>

@@ -39,7 +39,9 @@ function MainApp() {
   // Set default tab based on the user's role upon login
   useEffect(() => {
     if (isAuthenticated && currentRole) {
-      if (currentRole === 'staffAdmin' || currentRole === 'owner') {
+      if (currentRole === 'owner') {
+        setActiveTab('rates');
+      } else if (currentRole === 'staffAdmin') {
         setActiveTab('today');
       } else if (currentRole === 'billingAdmin') {
         setActiveTab('billing');
@@ -115,7 +117,7 @@ function MainApp() {
             queryClient.invalidateQueries({ queryKey: ['entries'] });
             setEditingEntry(null);
             if (currentRole === 'owner') {
-              setActiveTab('today');
+              setActiveTab('rates');
             } else if (currentRole === 'billingAdmin') {
               setActiveTab('statement');
             } else {
@@ -125,7 +127,7 @@ function MainApp() {
           onCancel={() => {
             setEditingEntry(null);
             if (currentRole === 'owner') {
-              setActiveTab('today');
+              setActiveTab('rates');
             } else if (currentRole === 'billingAdmin') {
               setActiveTab('statement');
             } else {
@@ -161,7 +163,7 @@ function MainApp() {
             if (currentRole === 'billingAdmin') {
               setActiveTab('billing');
             } else if (currentRole === 'owner') {
-              setActiveTab('today');
+              setActiveTab('rates');
             } else {
               setActiveTab('statement');
             }
